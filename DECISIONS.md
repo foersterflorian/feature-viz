@@ -506,34 +506,49 @@ refreshes the grid every third frame. "Degraded" in §5 refers to what is on
 screen, never to the frame rate. On this box CPU inference is 13.4 ms against
 7.8 ms on the GPU; the rest of the difference is the smaller canvas.
 
-### 14.1 Model scale: n, s and m cost almost the same
+### 14.1 Model scale: every scale stays above 30 FPS
 
-Measured on the same clip and harness, GPU profile, all three weights files:
+Measured on the same clip and harness, GPU profile, all five weights files:
 
 | Weights | Params | FPS (mean / median) | Loop | Isolated forward |
 |---|---|---|---|---|
-| `yolo26n.pt` | 2.6 M | 36.0 / 36.5 | 27.9 ms | 8.91 ms |
-| `yolo26s.pt` | 10.0 M | 35.5 / 36.0 | 28.3 ms | 9.30 ms |
-| `yolo26m.pt` | 21.9 M | 35.1 / 35.6 | 28.6 ms | 9.88 ms |
+| `yolo26n.pt` | 2.6 M | 36.0 / 36.5 | 27.9 ms | 9.08 ms |
+| `yolo26s.pt` | 10.0 M | 35.5 / 36.0 | 28.3 ms | 9.17 ms |
+| `yolo26m.pt` | 21.9 M | 35.1 / 35.6 | 28.6 ms | 9.76 ms |
+| `yolo26l.pt` | 26.3 M | 31.5 / 31.9 | 31.6 ms | 14.10 ms |
+| `yolo26x.pt` | 59.0 M | 32.0 / 32.3 | 31.3 ms | 14.90 ms |
+
+`l` and `x` were each run twice (31.8/31.2 and 32.0/32.0 FPS). They are not
+distinguishable in the loop: `x` measures marginally faster than `l` despite
+the slower isolated forward, and the gap is inside the run-to-run spread.
 
 "Isolated forward" is `model.model(x)` on a fixed 1×3×640×640 tensor with
 `torch.cuda.synchronize()` around the loop — no capture, no visualisation.
 
-**Eight times the parameters cost one millisecond.** The reason is that at
+**Twenty-three times the parameters cost four FPS.** The reason is that at
 batch 1 the forward is bound by kernel-launch latency, not by arithmetic. For
 `yolo26m`, batch 1 takes 9.53 ms and batch 2 takes 10.83 ms — doubling the work
 adds 1.3 ms. Only from batch 4 does it scale with the work (22.1 / 50.0 /
 107.4 ms for 4 / 8 / 16), settling near 6.2 ms per image. At batch 1 the GPU
 spends most of its time idle between small kernels.
 
+This is also why the step that costs something is **m → l**, not `x`'s jump in
+parameter count: `l` and `x` are the deeper configurations, so they issue more
+kernels. `x` has 2.2× the parameters of `l` for 0.8 ms more. Parameter count is
+the wrong axis here; the number of launched kernels is the right one.
+
 **Consequence for the demonstrator.** A larger model is not the thing that
-breaks real time here; the display path is. Going from `n` to `m` costs about
-1 FPS and buys noticeably better detections, which is a good trade for a talk.
-The target indices are unchanged across the three scales — verified by dump,
+breaks real time here; the display path is. `n` through `m` costs about 1 FPS
+in total, and even `x` still runs at 32 FPS. Model choice can therefore be made
+on detection quality rather than on speed — which is the opposite of the
+assumption the profile in `build_config()` was written under.
+
+The target indices are unchanged across **all five scales** — verified by dump,
 all six resolve to the same block types (§3).
 
-**Not measured:** `l` and `x`. The batch sweep shows that compute does
-eventually dominate, so the flat behaviour cannot be extrapolated past `m`.
-Also note the fixed overhead is paid on the **CPU** issuing kernels, so a
-machine with a faster GPU but a slower single-core will not necessarily do
-better.
+**Caveats.** All of this is batch 1 at 640 px on a 12 GB card; `x` fits, but
+there is no headroom study. The fixed overhead is paid on the **CPU** issuing
+kernels, so a machine with a faster GPU but a slower single core will not
+necessarily do better. Detection *quality* was not assessed at all — this
+section is about cost, and the larger models are worth their millisecond only
+if they visibly detect better on the material actually shown.
