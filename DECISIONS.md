@@ -498,21 +498,23 @@ pipeline.
 
 | Configuration | FPS (mean / median / p5) | Loop |
 |---|---|---|
-| GPU profile, default | 36.3 / 36.8 / 33.0 | 27.6 ms |
-| GPU profile, one MJPEG client attached | 34.7 / 35.3 / 31.4 | 28.9 ms |
+| GPU profile, default | 34.0 / 34.5 / 29.7 | 29.5 ms |
+| GPU profile, one MJPEG client attached | 32.5 / 33.0 / 28.9 | 30.9 ms |
 | Detection only, no feature maps | 90.5 / 90.7 / 85.6 | 11.1 ms |
-| CPU profile (`FORCE_CPU=1`) | 41.6 / 41.8 / 35.9 | 24.2 ms |
+| CPU profile (`FORCE_CPU=1`) | 40.9 / 41.2 / 35.4 | 24.6 ms |
 
-Two GPU runs gave 36.3 and 36.6 FPS mean, so the figure is stable to about 1%.
+Repeat runs agree to about 1%. These figures are **after** the caption strips
+of §15; before them the GPU profile measured 36.3 FPS on a 3806×1160 canvas.
+The strips cost 2.3 FPS, which is the price of a legible label.
 
 **The 30 FPS target is met, for the wrong reason.** Inference is not the
 bottleneck. Mean milliseconds per frame in the GPU profile:
 
 ```
 ultralytics (pre + inference + post)   7.8
-JPEG encode                           10.2
-compose (resize + hstack)              4.0
-feature-map render                     4.2
+JPEG encode                           10.4
+compose (resize + hstack)              4.9
+feature-map render                     4.9
 result.plot()                          1.0
 ```
 
@@ -521,7 +523,7 @@ result.plot()                          1.0
 time is charged to `render` rather than to `inference`. The line items are
 indicative; only the loop total is measured end to end.
 
-The display path is **14.2 ms, over half the frame budget**, and JPEG encoding
+The display path is **15.3 ms, over half the frame budget**, and JPEG encoding
 alone costs more than the network. §10 previously assumed this was uncritical
 "below ~1920×1080 total canvas" — but the canvas is **3806×1160**, 4.4
 megapixels, more than twice that threshold. The estimate was not conservative,
@@ -555,6 +557,10 @@ Measured on the same clip and harness, GPU profile, all five weights files:
 | `yolo26m.pt` | 21.9 M | 35.1 / 35.6 | 28.6 ms | 9.76 ms |
 | `yolo26l.pt` | 26.3 M | 31.5 / 31.9 | 31.6 ms | 14.10 ms |
 | `yolo26x.pt` | 59.0 M | 32.0 / 32.3 | 31.3 ms | 14.90 ms |
+
+This sweep was measured before the caption strips of §15 and is therefore
+about 2 FPS optimistic in absolute terms; the comparison between scales is
+unaffected, since all five carry the same display path.
 
 `l` and `x` were each run twice (31.8/31.2 and 32.0/32.0 FPS). They are not
 distinguishable in the loop: `x` measures marginally faster than `l` despite
@@ -591,3 +597,38 @@ kernels, so a machine with a faster GPU but a slower single core will not
 necessarily do better. Detection *quality* was not assessed at all — this
 section is about cost, and the larger models are worth their millisecond only
 if they visibly detect better on the material actually shown.
+
+---
+
+## 15. Labels: a caption strip, not text on the tiles
+
+**Context.** Each panel carried its layer label, and the detection frame its
+FPS and pipeline line, drawn straight onto the image with `cv2.putText` in
+amber and cyan at scale 0.42 and 0.5. At a talk they were unreadable. Two
+reasons compound: feature-map tiles are bright and high-frequency, so no
+colour holds up against them, and the finished canvas is about 3800 px wide,
+which a 1920-wide projector or browser window downscales by half — halving the
+effective type size with it.
+
+**Decision.** A black strip stacked above each image, carrying white text at
+scale 0.7 (panels) and 1.1 / 0.75 (frame). One helper, `caption()`, serves
+both.
+
+**Why not an outline.** Drawing a black stroke behind bright glyphs is the
+usual trick and was tried first. It is readable, but it sits on top of the
+tiles, so it competes with exactly the content the demonstrator exists to
+show, and at half scale the stroke thickens into a smudge. A strip is
+unambiguous at any scale and covers no data.
+
+**The strip must not grow the canvas.** The first version captioned the frame
+after fitting it to the target height. That made the frame taller than the
+grid, so the grid was scaled up to match and the canvas grew 15% — costing
+6 FPS, from 36.3 to 30.2. `compose` now fits the frame to the target height
+*minus* the strip, so the strip is free in area terms. Captioning after the
+fit also keeps the text at a fixed pixel size instead of one that depends on
+the camera's resolution.
+
+**Cost.** 2.3 FPS, 36.3 to 34.0 (§14), from the six extra `putText` calls, the
+per-panel stack and the 4% larger canvas. Writing each panel directly into a
+preallocated buffer instead of `np.vstack` was measured and saves 0.16 ms of a
+29.5 ms loop — not worth the loss of clarity.

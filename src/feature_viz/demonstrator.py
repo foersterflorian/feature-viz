@@ -293,6 +293,38 @@ class Scale:
 # ==========================================================================
 # Rendering
 # ==========================================================================
+# A caption line is (text, font scale, BGR colour).
+CaptionLine: TypeAlias = "tuple[str, float, tuple[int, int, int]]"
+
+FONT: Final[int] = cv2.FONT_HERSHEY_SIMPLEX
+
+
+def caption_height(lines: Sequence[CaptionLine]) -> int:
+    """Height of the strip `caption` would add. Needed up front so that a
+    caller can shrink the image by exactly that much and keep the canvas
+    the size it would have been."""
+    return sum(int(round(26 * scale)) + 4 for (_, scale, _) in lines) + 4
+
+
+def caption(img: BGRImage, lines: Sequence[CaptionLine]) -> BGRImage:
+    """Stack a black strip carrying `lines` on top of `img`.
+
+    The text used to be drawn onto the image itself, where it was not
+    readable: feature-map tiles are bright and high-frequency, so no
+    colour holds up against them, and the finished canvas is downscaled
+    to roughly half size on a 1920-wide projector. A strip costs a few
+    rows of pixels and covers no data at all.
+    """
+    heights: list[int] = [int(round(26 * scale)) + 4 for (_, scale, _) in lines]
+    bar: BGRImage = np.zeros((caption_height(lines), img.shape[1], 3), dtype=np.uint8)
+
+    y: int = 4
+    for (text, scale, colour), h in zip(lines, heights):
+        y += h
+        cv2.putText(bar, text, (7, y - 4), FONT, scale, colour, 1, cv2.LINE_AA)
+    return cast(BGRImage, np.vstack([bar, img]))
+
+
 class GridRenderer:
     """Feature maps -> tile grid. The expensive steps run on the model's
     compute device; only the finished tile stack is transferred."""
@@ -353,17 +385,8 @@ class GridRenderer:
 
         panel: BGRImage = cast(BGRImage, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
         c, h, w = (int(tensor.shape[1]), int(tensor.shape[2]), int(tensor.shape[3]))
-        cv2.putText(
-            panel,
-            f"L{idx} {self.tap.label(idx)}  {c}x{h}x{w}",
-            (4, 16),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.42,
-            (60, 200, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        return panel
+        label: str = f"L{idx} {self.tap.label(idx)}  {c}x{h}x{w}"
+        return caption(panel, [(label, 0.7, (255, 255, 255))])
 
     def render(self) -> BGRImage:
         panels: list[BGRImage] = [
@@ -405,27 +428,24 @@ class GridRenderer:
 
 def compose(frame: BGRImage, grid: BGRImage, fps: float, info: str) -> BGRImage:
     """Detection image and feature-map grid side by side."""
-    target_h: int = max(frame.shape[0], grid.shape[0])
 
-    def fit(img: BGRImage) -> BGRImage:
-        s: float = target_h / img.shape[0]
-        return cast(BGRImage, cv2.resize(img, (int(img.shape[1] * s), target_h)))
+    def fit(img: BGRImage, height: int) -> BGRImage:
+        s: float = height / img.shape[0]
+        return cast(BGRImage, cv2.resize(img, (int(img.shape[1] * s), height)))
 
-    frame = fit(frame)
-    cv2.putText(
-        frame,
-        f"{fps:5.1f} FPS",
-        (10, 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 0),
-        2,
-        cv2.LINE_AA,
+    lines: list[CaptionLine] = [
+        (f"{fps:5.1f} FPS", 1.1, (120, 255, 120)),
+        (info, 0.75, (210, 210, 210)),
+    ]
+    # The frame is fitted to the target height *minus* its caption strip, so
+    # the strip costs no canvas area. Captioning after the fit also keeps the
+    # text at a fixed pixel size, independent of the camera's resolution.
+    bar: int = caption_height(lines)
+    target_h: int = max(frame.shape[0] + bar, grid.shape[0])
+    return cast(
+        BGRImage,
+        np.hstack([caption(fit(frame, target_h - bar), lines), fit(grid, target_h)]),
     )
-    cv2.putText(
-        frame, info, (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 220), 1, cv2.LINE_AA
-    )
-    return np.hstack([frame, fit(grid)])
 
 
 # ==========================================================================
