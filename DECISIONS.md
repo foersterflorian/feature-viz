@@ -112,9 +112,47 @@ This prints the module list with the current targets marked.
 **Verified 2026-09-21** against `yolo26n.pt` (24 modules, indices 0–23). The
 GPU targets `[2, 4, 9, 10, 16, 22]` resolve to C3k2, C3k2, SPPF, C2PSA, C3k2
 and C3k2; the CPU subset `[4, 9, 16]` to C3k2, SPPF and C3k2. Index 23 is
-`Detect` and is deliberately not a target. This holds for **this weights file
-only** — re-run the dump after changing `WEIGHTS`, since a different scale or
-generation renumbers the chain.
+`Detect` and is deliberately not a target. The same dump on `s`, `m`, `l` and
+`x` marks the same six block types, so the indices are stable **across the
+YOLO26 scales** — but not across generations. Re-run the dump after changing
+`WEIGHTS` to anything that is not a YOLO26 checkpoint.
+
+### 3.1 Model scale: the demonstrator stays on `yolo26n`
+
+**Decision.** `yolo26n.pt` remains the default, and the reason is this section,
+not performance.
+
+**Why.** `max_channels = 64` caps how many tiles a layer can contribute, so a
+wider model does not show more — it shows a smaller fraction of itself.
+Channel counts at the six target layers, measured 2026-09-21:
+
+| Weights | Channels at L2, L4, L9, L10, L16, L22 | Visible in the grid |
+|---|---|---|
+| `yolo26n.pt` | 64, 128, 256, 256, 64, 256 | 384 of 1024 — **38 %** |
+| `yolo26s.pt` | 128, 256, 512, 512, 128, 512 | 384 of 2048 — 19 % |
+| `yolo26m.pt` | 256, 512, 512, 512, 256, 512 | 384 of 2560 — 15 % |
+| `yolo26l.pt` | 256, 512, 512, 512, 256, 512 | 384 of 2560 — 15 % |
+| `yolo26x.pt` | 384, 768, 768, 768, 384, 768 | 384 of 3840 — **10 %** |
+
+On `yolo26n`, layers 2 and 16 have exactly 64 channels and are therefore shown
+**in full**. "This is what the layer computes" is then literally true. On `x`
+the audience sees the top 10 % by activation energy, and the honest phrasing
+becomes "this is the selection we find most interesting". For a demonstrator
+whose entire purpose is to make the layer visible, that is the expensive loss,
+and it appears in no frame-rate measurement.
+
+**Speed does not decide this.** Every scale holds above 30 FPS on the GPU
+profile (§14.1), so throughput is not an argument for or against a larger
+model here.
+
+**The CPU fallback does decide it.** Both profiles load the same weights file,
+and §5 depends on `FORCE_CPU=1` staying demonstrable. Reduced profile: `n`
+41.6 FPS, `m` 13.8, `x` 7.0. With `x` the fallback is no longer a fallback.
+
+**When to revisit.** Only if detections on the real presentation material are
+visibly inadequate — detection *quality* was never assessed, only cost. The
+step would then be `m`, never `l` or `x`: those cost the most frame rate on the
+GPU, end the CPU path, and show the smallest fraction of each layer.
 
 ---
 
@@ -539,9 +577,10 @@ the wrong axis here; the number of launched kernels is the right one.
 
 **Consequence for the demonstrator.** A larger model is not the thing that
 breaks real time here; the display path is. `n` through `m` costs about 1 FPS
-in total, and even `x` still runs at 32 FPS. Model choice can therefore be made
-on detection quality rather than on speed — which is the opposite of the
-assumption the profile in `build_config()` was written under.
+in total, and even `x` still runs at 32 FPS. Model choice is therefore not a
+speed question — which is the opposite of the assumption the profile in
+`build_config()` was written under. What does decide it is channel coverage in
+the grid and the CPU fallback: see §3.1.
 
 The target indices are unchanged across **all five scales** — verified by dump,
 all six resolve to the same block types (§3).
