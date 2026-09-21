@@ -26,15 +26,16 @@ On the type annotations:
   * `YoloLayer` is a Protocol for the attributes Ultralytics attaches to
     the modules at runtime (.i, .f, .type). A type checker does not know
     them on `nn.Module`.
-  * Checked with: mypy demonstrator.py --ignore-missing-imports
-    (ultralytics ships no stubs).
+  * Checked with: mypy src/feature_viz/demonstrator.py
+    --ignore-missing-imports (ultralytics ships no stubs).
 
-Usage:
-    python demonstrator.py                  # auto-detect, browser
-    SOURCE=0 python demonstrator.py         # force webcam
-    FORCE_CPU=1 python demonstrator.py      # exercise the CPU path on a GPU box
-    DISPLAY_MODE=window python demonstrator.py
-    DUMP_STRUCTURE=1 python demonstrator.py # print the layer list
+Usage (console script from pyproject.toml; `pdm run feature-viz` outside an
+activated venv, `python -m feature_viz.demonstrator` as the long form):
+    feature-viz                  # auto-detect, browser
+    SOURCE=0 feature-viz         # force webcam
+    FORCE_CPU=1 feature-viz      # exercise the CPU path on a GPU box
+    DISPLAY_MODE=window feature-viz
+    DUMP_STRUCTURE=1 feature-viz # print the layer list
 
 Dependencies:
     pip install ultralytics opencv-python numpy

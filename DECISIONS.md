@@ -104,12 +104,17 @@ plain convolution stages — it reads well to an audience.
 generations.* Verify them before a demonstration:
 
 ```bash
-DUMP_STRUCTURE=1 python demonstrator.py
+DUMP_STRUCTURE=1 feature-viz
 ```
 
-This prints the module list with the current targets marked. The indices
-currently in the file have **not** been verified against a real YOLO26n model
-(see §10).
+This prints the module list with the current targets marked.
+
+**Verified 2026-09-21** against `yolo26n.pt` (24 modules, indices 0–23). The
+GPU targets `[2, 4, 9, 10, 16, 22]` resolve to C3k2, C3k2, SPPF, C2PSA, C3k2
+and C3k2; the CPU subset `[4, 9, 16]` to C3k2, SPPF and C3k2. Index 23 is
+`Detect` and is deliberately not a target. This holds for **this weights file
+only** — re-run the dump after changing `WEIGHTS`, since a different scale or
+generation renumbers the chain.
 
 ---
 
@@ -311,7 +316,6 @@ behaviour.
 Everything below was reasoned about but not measured. Verify before relying on
 it.
 
-- **Layer indices** in `Config.targets` — check with `DUMP_STRUCTURE=1`.
 - **Frame rate.** 30 FPS is plausible arithmetic, not a measurement. A YOLO26n
   on a 4090 is 1–2 ms per frame and the visualisation path should be similar,
   against a 33 ms budget — but the interaction of `stream=True` with the MJPEG
@@ -321,6 +325,8 @@ it.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
+- **pyright has never been run.** `pyproject.toml` configures it (basic mode)
+  but it is not installed; only mypy is. The two need not agree — see §13.
 
 ---
 
@@ -383,3 +389,50 @@ hooks and resetting calibration; weights/imgsz/source/device require a pipeline
 restart. Configuration changes must be staged under a lock and picked up at the
 top of the loop, never mid-frame — half-old, half-new parameters combined with
 the EMA produce a state nobody can explain.
+
+---
+
+## 13. Type checking: narrow aliases plus casts
+
+**Context.** The project requires `mypy src/feature_viz/demonstrator.py
+--ignore-missing-imports` to stay clean, but mypy was not actually installed —
+the claim in the module docstring predates the current NumPy. Adding it (mypy
+2.3.1, NumPy 2.x) produced five errors in code nobody had changed, all of them
+stub imprecision rather than defects:
+
+- Four from OpenCV. `cv2.LUT`, `cv2.cvtColor`, `cv2.copyMakeBorder` and
+  `cv2.resize` are stubbed as returning `ndarray[Any, dtype[integer |
+  floating]]`. NumPy 2 made `ndarray` generic over the shape, so that union no
+  longer unifies with `NDArray[np.uint8]`.
+- One from Ultralytics. `model.predict()` is annotated `Iterator[Results |
+  Tensor] | list[Results] | list[Tensor]`, because the return type depends on
+  the `stream` argument — which a signature cannot express.
+
+**Decision.** Keep `GrayImage` and `BGRImage` as `NDArray[np.uint8]` and
+`cast()` at the five call sites.
+
+**Why.** The aliases are the only place the uint8 expectation is written down;
+widening them to `NDArray[Any]` would delete the information the annotations
+exist to carry, and it would do so everywhere in order to satisfy four lines. A
+cast is local and greppable, and it names the type being asserted at the point
+where the assertion is made.
+
+**Rejected.** `# type: ignore[assignment]` — silences an error category on a
+line rather than stating what the value is, and keeps silencing it after the
+line changes. Writing cv2 stubs — an unbounded maintenance obligation against a
+library that ships its own. Dropping the mypy requirement — the annotations are
+load-bearing for readers who did not write this.
+
+**The trap.** A cast asserts, it does not check. If a cv2 call ever returned a
+non-uint8 array, mypy would now stay silent about it. The runtime dtypes were
+confirmed once, by exercising `GridRenderer.render` and `compose` on synthetic
+input; nothing keeps them confirmed.
+
+**The `predict` cast target must stay a string.** `Results` is imported under
+`TYPE_CHECKING` only, and `cast()` evaluates its first argument at runtime — a
+bare `cast(Iterator[Results], ...)` raises `NameError` when the demonstrator
+starts, and no type checker will warn about it.
+
+**Tooling note.** `pyproject.toml` also carries a `[tool.pyright]` section in
+basic mode. Two checkers are configured; only mypy is installed and run. See
+§10.
