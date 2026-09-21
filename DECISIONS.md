@@ -54,9 +54,10 @@ here works on both by changing `WEIGHTS`.
   reasonable thing to explain instead.
 
 **Licensing.** AGPL-3.0 is more restrictive than YOLOv7's GPL-3.0, and it
-matters if the demonstrator is ever exposed as a network service. If that
-becomes a problem, RF-DETR (Apache 2.0) is the alternative, but its layer
-structure differs substantially and the visualisation would need rework.
+matters because the demonstrator *is* a network service (§7). This decided the
+project's own licence — see §16. If it ever becomes a problem, RF-DETR
+(Apache 2.0) is the alternative, but its layer structure differs substantially
+and the visualisation would need rework.
 
 **Revisit when.** YOLO27 was announced for around September 2026, adding
 monocular and stereo depth estimation. Check whether it has shipped and whether
@@ -632,3 +633,53 @@ the camera's resolution.
 per-panel stack and the 4% larger canvas. Writing each panel directly into a
 preallocated buffer instead of `np.vstack` was measured and saves 0.16 ms of a
 29.5 ms loop — not worth the loss of clarity.
+
+---
+
+## 16. Licence: AGPL-3.0-or-later, not MIT
+
+**Context.** The repository started with MIT, the author's default, and is
+public on GitHub. Of the dependencies, only `ultralytics` is copyleft
+(AGPL-3.0-or-later); torch, OpenCV and NumPy are permissive.
+
+**Decision.** The whole project is AGPL-3.0-or-later.
+
+**Why MIT was not tenable.** The program is functionless without ultralytics:
+it imports `YOLO`, registers forward hooks in its module chain and reads the
+attributes ultralytics attaches at runtime (§2). Distributed together that is a
+combined work, and the recipient cannot be granted it under MIT. Labelling the
+repository MIT would tell readers something untrue about what they receive.
+
+**§13 is the sharp edge.** The demonstrator binds `0.0.0.0` and serves an HTML
+page plus an MJPEG stream (§7), so users interact with it over a network.
+AGPL §13 then requires that they be offered the Corresponding Source. That
+obligation exists regardless of what the LICENSE file says; declaring MIT would
+only have hidden it. `PAGE` therefore carries a footer with copyright, licence
+and a source link, which also satisfies §5(d) for the interactive interface.
+
+**Rejected alternatives.**
+
+- *MIT for our own files plus a note that ultralytics is AGPL.* Common
+  practice, but it works only where the permissive part is independently
+  useful. Here it is not, and it leaves §13 unaddressed.
+- *Make the code model-agnostic and ship a permissive default backend.* The
+  hooks, renderer, mosaic and HTTP server genuinely do not depend on
+  ultralytics, so this is feasible — but the layer indices would have to be
+  re-established per backend (§3), and the point of the project is YOLO26.
+  Worth revisiting only if industrial reuse becomes a concrete requirement.
+- *Ultralytics Enterprise Licence.* Removes the obligations, costs money and
+  procurement effort, and contradicts the intent to be open.
+
+**Consequences.** Anyone building on this must publish their changes under the
+same terms, including when they only expose it as a service. For a publicly
+funded research demonstrator that is the intended outcome, but it does bar
+closed reuse by an industry partner without a separate agreement.
+
+**Open, not decided here.** Whether copyright sits with the author or with TU
+Chemnitz as the employer, and whether any funder imposes licence conditions,
+was not assessed. The notice currently names the author as given in
+`pyproject.toml`. Both questions belong to the institution, not to this file.
+
+**Weights** are not redistributed: `*.pt` is git-ignored and downloaded at
+runtime (§11), so Ultralytics' model files carry their own terms and are not
+conveyed by this repository.

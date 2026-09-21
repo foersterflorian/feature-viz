@@ -8,7 +8,10 @@ authors = [
 dependencies = ["numpy>=2.5.3", "opencv-python>=5.0.0.93", "torch>=2.14.0", "ultralytics>=8.4.157"]
 requires-python = "<3.14,>=3.12"
 readme = "README.md"
-license = {text = "MIT"}
+# AGPL, not MIT: the demonstrator is built around ultralytics, which is
+# AGPL-3.0-or-later, and it serves the stream over HTTP. See DECISIONS.md §16.
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 [project.scripts]
 feature-viz = "feature_viz.demonstrator:main"
