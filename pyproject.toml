@@ -15,5 +15,137 @@ requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 
+[tool.pyright]
+typeCheckingMode  = "basic"
+pythonVersion = "3.11"
+reportUnusedImport = "none"
+reportUnusedVariable = "warning"
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+reportPrivateUsage = "error"
+
+
+[tool.ruff]
+line-length = 94
+indent-width = 4
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "SLF"]
+
+[tool.ruff.lint.isort]
+extra-standard-library = ["typing_extensions"]
+
+
+[tool.pytest.ini_options]
+addopts = [
+    "-vl",
+    "--import-mode=importlib",
+]
+testpaths = [
+    "tests",
+]
+filterwarnings = [
+]
+markers = [
+    "new: to test only new tests, usually removed afterwards (deselect with '-m \"not quick\"')",
+]
+log_cli = true
+
+
+[tool.coverage.run]
+relative_files = true
+source = [
+    "src/",
+    "tests/",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "def __str__",
+    "@overload",
+    "if logging",
+    'if [t\.]*TYPE_CHECKING',
+    "@pytest.fixture",
+    "if __name__ == __main__:",
+    "@wrap_result",
+]
+
+[tool.coverage.html]
+directory = "reports/coverage"
+
+
+[tool.bumpversion]
+current_version = "0.1.1dev12"
+parse = """(?x)
+    (?P<major>0|[1-9]\\d*)\\.
+    (?P<minor>0|[1-9]\\d*)\\.
+    (?P<patch>0|[1-9]\\d*)
+    (?:
+                                      # separator for pre-release section
+        (?P<pre_l>[a-zA-Z-]+)         # pre-release label
+        (?P<pre_n>0|[1-9]\\d*)        # pre-release version number
+    )?                                # pre-release section is optional
+"""
+serialize = [
+    "{major}.{minor}.{patch}{pre_l}{pre_n}",
+    "{major}.{minor}.{patch}",
+]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+ignore_missing_files = false
+tag = false
+sign_tags = false
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = true
+commit = false
+message = "Bump version: {current_version} → {new_version}"
+commit_args = ""
+setup_hooks = []
+pre_commit_hooks = []
+post_commit_hooks = []
+
+[tool.bumpversion.parts.pre_l]
+values = ["dev", "rc", "final"]
+optional_value = "final"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = "version = \"{current_version}\""
+replace = "version = \"{new_version}\""
+
+
 [tool.pdm]
 distribution = true
+
+[tool.pdm.build]
+package-dir = "src"
+
+
+[dependency-groups]
+tests = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.1",
+]
+lint = [
+    "ruff>=0.9.6",
+]
+dev = [
+    "pdoc3>=0.11.5",
+    "bump-my-version>=1.1.1",
+    "nox>=2025.2.9",
+]
+nb = [
+    "jupyterlab>=4.3.5",
+    "ipywidgets>=8.1.5",
+]
