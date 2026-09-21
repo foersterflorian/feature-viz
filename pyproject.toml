@@ -1,7 +1,7 @@
 [project]
 name = "feature-viz"
 version = "0.1.0"
-description = "Default template for PDM package"
+description = "feature map visualisation (prototype)"
 authors = [
     {name = "Florian Förster",email = "florian.foerster@mb.tu-chemnitz.de"},
 ]
