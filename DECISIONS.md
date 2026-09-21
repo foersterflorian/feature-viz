@@ -478,6 +478,11 @@ feature-map render                     4.2
 result.plot()                          1.0
 ```
 
+**Read that split with care.** CUDA is asynchronous, and the first
+`.cpu()` in `GridRenderer.panel` is what forces the wait, so part of the GPU
+time is charged to `render` rather than to `inference`. The line items are
+indicative; only the loop total is measured end to end.
+
 The display path is **14.2 ms, over half the frame budget**, and JPEG encoding
 alone costs more than the network. §10 previously assumed this was uncritical
 "below ~1920×1080 total canvas" — but the canvas is **3806×1160**, 4.4
@@ -500,3 +505,35 @@ profile, because it runs a smaller input, three layers instead of six and
 refreshes the grid every third frame. "Degraded" in §5 refers to what is on
 screen, never to the frame rate. On this box CPU inference is 13.4 ms against
 7.8 ms on the GPU; the rest of the difference is the smaller canvas.
+
+### 14.1 Model scale: n, s and m cost almost the same
+
+Measured on the same clip and harness, GPU profile, all three weights files:
+
+| Weights | Params | FPS (mean / median) | Loop | Isolated forward |
+|---|---|---|---|---|
+| `yolo26n.pt` | 2.6 M | 36.0 / 36.5 | 27.9 ms | 8.91 ms |
+| `yolo26s.pt` | 10.0 M | 35.5 / 36.0 | 28.3 ms | 9.30 ms |
+| `yolo26m.pt` | 21.9 M | 35.1 / 35.6 | 28.6 ms | 9.88 ms |
+
+"Isolated forward" is `model.model(x)` on a fixed 1×3×640×640 tensor with
+`torch.cuda.synchronize()` around the loop — no capture, no visualisation.
+
+**Eight times the parameters cost one millisecond.** The reason is that at
+batch 1 the forward is bound by kernel-launch latency, not by arithmetic. For
+`yolo26m`, batch 1 takes 9.53 ms and batch 2 takes 10.83 ms — doubling the work
+adds 1.3 ms. Only from batch 4 does it scale with the work (22.1 / 50.0 /
+107.4 ms for 4 / 8 / 16), settling near 6.2 ms per image. At batch 1 the GPU
+spends most of its time idle between small kernels.
+
+**Consequence for the demonstrator.** A larger model is not the thing that
+breaks real time here; the display path is. Going from `n` to `m` costs about
+1 FPS and buys noticeably better detections, which is a good trade for a talk.
+The target indices are unchanged across the three scales — verified by dump,
+all six resolve to the same block types (§3).
+
+**Not measured:** `l` and `x`. The batch sweep shows that compute does
+eventually dominate, so the flat behaviour cannot be extrapolated past `m`.
+Also note the fixed overhead is paid on the **CPU** issuing kernels, so a
+machine with a faster GPU but a slower single-core will not necessarily do
+better.
