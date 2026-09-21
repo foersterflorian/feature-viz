@@ -231,11 +231,15 @@ backend. In a container this is the single most fragile part of the setup.
 
 Streaming removes the problem entirely: no desktop access, no socket mounts,
 and the output can be put on a projector, a tablet or a second machine without
-sitting at the demo box. JPEG encoding costs a few milliseconds per frame,
-which is affordable inside a 33 ms budget.
+sitting at the demo box. JPEG encoding was assumed to cost "a few
+milliseconds"; measured it is **10.2 ms**, the single largest item in the
+frame budget (§14). It is still affordable inside 33 ms, but it is the first
+thing to trade away if headroom is ever needed.
 
 **Buffering.** The server holds only the most recently encoded frame. A slow
-client skips frames instead of throttling the inference loop.
+client skips frames instead of throttling the inference loop. The skipping
+path has not been exercised: the one client measured kept up with every
+published frame (§14).
 
 **`/healthz`** exists for the container health check. It should eventually
 report "last frame newer than N seconds" rather than "process alive" — a hung
@@ -316,12 +320,8 @@ behaviour.
 Everything below was reasoned about but not measured. Verify before relying on
 it.
 
-- **Frame rate.** 30 FPS is plausible arithmetic, not a measurement. A YOLO26n
-  on a 4090 is 1–2 ms per frame and the visualisation path should be similar,
-  against a 33 ms budget — but the interaction of `stream=True` with the MJPEG
-  thread has not been observed under load.
-- **Display path cost.** `np.hstack` plus JPEG encoding is CPU memory
-  bandwidth. Should be uncritical below ~1920×1080 total canvas.
+- **Everything in §14 holds for one machine and one clip.** Camera capture,
+  several simultaneous clients and browser-side decoding are still unmeasured.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
@@ -436,3 +436,67 @@ starts, and no type checker will warn about it.
 **Tooling note.** `pyproject.toml` also carries a `[tool.pyright]` section in
 basic mode. Two checkers are configured; only mypy is installed and run. See
 §10.
+
+---
+
+## 14. Measured performance
+
+Measured 2026-09-21. This replaces the frame-rate and display-cost estimates
+that stood in §10; both were wrong about *where* the time goes, though the
+headline number held.
+
+**Machine.** Pop!_OS, **RTX 4070 Ti (12 GB)**, Ryzen 7 5700G (16 threads),
+driver 580.173.02, torch 2.14.0+cu130, ultralytics 8.4.157, OpenCV 5.0.0.
+Note this is **not** the RTX 4090 named as target hardware in `CLAUDE.md` —
+the numbers below are a lower bound for the demonstration machine.
+
+**Method.** A 1200-frame 1280×720 clip built from the ultralytics `bus.jpg`
+asset with a slow pan and brightness drift, so that consecutive frames differ
+and roughly five objects are detected throughout. 60 frames of warm-up
+discarded, then 400 frames measured. The harness reuses `FeatureTap`,
+`GridRenderer` and `compose` and mirrors the body of `main()`. A video source
+is used deliberately: a webcam would measure the camera's 30 Hz, not the
+pipeline.
+
+| Configuration | FPS (mean / median / p5) | Loop |
+|---|---|---|
+| GPU profile, default | 36.3 / 36.8 / 33.0 | 27.6 ms |
+| GPU profile, one MJPEG client attached | 34.7 / 35.3 / 31.4 | 28.9 ms |
+| Detection only, no feature maps | 90.5 / 90.7 / 85.6 | 11.1 ms |
+| CPU profile (`FORCE_CPU=1`) | 41.6 / 41.8 / 35.9 | 24.2 ms |
+
+Two GPU runs gave 36.3 and 36.6 FPS mean, so the figure is stable to about 1%.
+
+**The 30 FPS target is met, for the wrong reason.** Inference is not the
+bottleneck. Mean milliseconds per frame in the GPU profile:
+
+```
+ultralytics (pre + inference + post)   7.8
+JPEG encode                           10.2
+compose (resize + hstack)              4.0
+feature-map render                     4.2
+result.plot()                          1.0
+```
+
+The display path is **14.2 ms, over half the frame budget**, and JPEG encoding
+alone costs more than the network. §10 previously assumed this was uncritical
+"below ~1920×1080 total canvas" — but the canvas is **3806×1160**, 4.4
+megapixels, more than twice that threshold. The estimate was not conservative,
+it was aimed at the wrong number.
+
+**The visualisation costs about 16.5 ms per frame** — detection alone runs at
+90 FPS. That is the price of the demonstrator, and it is paid on the CPU, not
+the GPU. If more headroom is ever needed, `jpeg_quality`, the canvas size and
+`vis_every` are the levers, in that order; a faster GPU buys comparatively
+little.
+
+**`stream=True` and the MJPEG thread do not fight.** One local client costs
+4.5% throughput and received all 400 published frames — nothing was skipped.
+The frame-skipping path in `FrameBuffer` was therefore never exercised here;
+it remains untested under a slow or remote client.
+
+**The CPU profile is not slower — it shows less.** At 41.6 FPS it beats the GPU
+profile, because it runs a smaller input, three layers instead of six and
+refreshes the grid every third frame. "Degraded" in §5 refers to what is on
+screen, never to the frame rate. On this box CPU inference is 13.4 ms against
+7.8 ms on the GPU; the rest of the difference is the smaller canvas.
