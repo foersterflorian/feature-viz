@@ -5,8 +5,8 @@ description = "feature map visualisation (prototype)"
 authors = [
     {name = "Florian Förster",email = "florian.foerster@mb.tu-chemnitz.de"},
 ]
-dependencies = []
-requires-python = ">=3.12"
+dependencies = ["numpy>=2.5.3", "opencv-python>=5.0.0.93", "torch>=2.14.0", "ultralytics>=8.4.157"]
+requires-python = "<3.14,>=3.12"
 readme = "README.md"
 license = {text = "MIT"}
 
@@ -139,6 +139,7 @@ tests = [
 ]
 lint = [
     "ruff>=0.9.6",
+    "mypy>=2.3.1",
 ]
 dev = [
     "pdoc3>=0.11.5",
