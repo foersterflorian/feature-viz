@@ -2,7 +2,7 @@
 
 **Project:** YOLO feature-map visualisation demonstrator (TUC-KMI)
 **Status:** porting from the YOLOv7-based original to Ultralytics YOLO26
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-22
 
 This file records *why* the code looks the way it does. The code says what it
 does; this says what was considered and rejected, so that changing something
@@ -298,8 +298,35 @@ demonstrator work within minutes, with no device paths, no group permissions
 and no camera. That is the difference between "it doesn't run and nobody knows
 why" and "it runs, the camera just isn't wired up yet".
 
-**TODO:** `assets/sample.mp4` does not exist yet. Ten seconds of footage with a
-few recognisable objects is enough. Check licensing before committing it.
+**The sample clip exists** (added 2026-09-22). `assets/sample.mp4` is ten
+seconds of 1280x720 H.264 footage generated from a single CC0 still by
+`tools/make_sample.py` — a slow pan with a slight brightness drift, so
+consecutive frames differ.
+
+**ffmpeg is a dependency of the tooling, not of the demonstrator.** The OpenCV
+wheels ship no usable H.264 encoder: `avc1` resolves to a hardware encoder
+absent from a normal desktop, and the remaining `mp4v` produced a 19 MB file
+for ten seconds. Piping raw frames to ffmpeg brings that to 3.4 MB. Measured
+against §12: nothing was added to the demonstrator's import graph, the pipe is
+`subprocess` from the standard library, and the artefact is an ordinary MP4
+that OpenCV reads unaided — so a missing ffmpeg costs the ability to *rebuild*
+the clip, never the ability to run the demonstrator. The script says so and
+exits rather than silently falling back to a second encoder. Provenance, licence and checksums of the still are
+recorded in `assets/SOURCES.md`; it verifies byte-identical against the SHA-1
+that the Wikimedia Commons API reports.
+
+**Why a clip and not the still itself.** `SOURCE` is passed straight to
+`model.predict`, and a single image yields exactly one frame. The FPS counter
+that `compose` draws is smoothed from a starting value of 0.0, so on one frame
+it shows a number that means nothing — which matters, because that canvas is
+what ends up in talks and programme booklets. The normalisation is unaffected:
+`Scale.get` initialises `lo`/`hi` directly on the first frame rather than
+easing in from zero (§4), so a still would have been correctly normalised.
+
+**Why a street scene.** YOLO's COCO classes are everyday objects, and a street
+gives both one large foreground object and many small ones — which is what
+makes the depth gradient legible. Measured on the chosen still at `imgsz=640`:
+15 detections across four classes (train, truck, person, car).
 
 **Webcam caveat.** Many UVC cameras default to YUYV rather than MJPG and drop
 to 5–10 FPS at 1080p regardless of model speed. This is the most common cause
