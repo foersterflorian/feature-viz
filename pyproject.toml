@@ -56,10 +56,13 @@ addopts = [
 testpaths = [
     "tests",
 ]
+# Makes `tests.support` importable under --import-mode=importlib.
+pythonpath = ["."]
 filterwarnings = [
 ]
 markers = [
-    "new: to test only new tests, usually removed afterwards (deselect with '-m \"not quick\"')",
+    "weights: needs the real yolo26n.pt checkpoint; skipped when it is absent",
+    "gpu: needs CUDA; skipped when it is absent",
 ]
 log_cli = true
 
