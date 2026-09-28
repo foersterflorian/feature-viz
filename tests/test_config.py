@@ -94,8 +94,15 @@ def test_missing_camera_points_at_the_sample_clip() -> None:
     assert "SOURCE=assets/sample.mp4" in error
 
 
-def test_stream_urls_are_left_to_ultralytics() -> None:
-    assert demo.source_error("rtsp://camera.local/stream") is None
+@pytest.mark.parametrize(
+    "source",
+    ["rtsp://camera.local/stream", str(ROOT / "assets"), str(ROOT / "assets" / "*.jpg"), "screen"],
+    ids=["url", "directory", "glob", "screen"],
+)
+def test_other_ultralytics_sources_are_passed_through(source: str) -> None:
+    """URLs, directories, globs and screen capture are valid ultralytics
+    sources; the up-front check must not refuse them."""
+    assert demo.source_error(source) is None
 
 
 def test_gamma_lut_is_a_monotonic_full_range_uint8_table(cpu_cfg: demo.Config) -> None:

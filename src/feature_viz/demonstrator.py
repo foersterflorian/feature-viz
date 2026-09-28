@@ -199,8 +199,6 @@ def source_error(source: str) -> str | None:
     There is deliberately no fallback to the sample clip: at a talk, a camera
     that silently failed must not pass for a live picture (DECISIONS.md §8).
     """
-    if "://" in source:
-        return None  # stream URL; only ultralytics can tell
     if source.isdigit():
         # Opens the device once, briefly (about 40 ms), before ultralytics
         # opens it for real. OpenCV's own backend warnings are silenced for
@@ -220,9 +218,18 @@ def source_error(source: str) -> str | None:
             f"cannot open camera {source}. Without a camera, use the sample clip:\n"
             f"    SOURCE=assets/sample.mp4 feature-viz"
         )
-    if not Path(source).is_file():
-        return f"source not found: {source} (relative to {Path.cwd()})"
-    return None
+    # Only a plain path that does not exist is refused. Stream URLs, globs
+    # (`frames/*.jpg`), directories and `screen` are ultralytics sources too;
+    # only ultralytics can judge them, and rejecting them here would take
+    # away inputs it supports.
+    if (
+        "://" in source
+        or any(ch in source for ch in "*?[")
+        or source.lower().startswith("screen")
+        or Path(source).exists()
+    ):
+        return None
+    return f"source not found: {source} (relative to {Path.cwd()})"
 
 
 # ==========================================================================
@@ -677,7 +684,8 @@ class StreamHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
             body: bytes = PAGE.format(
-                info=self.info,
+                # info carries the WEIGHTS path from the environment.
+                info=html.escape(self.info),
                 source=SOURCE_URL,
                 funding_text=html.escape(FUNDING_TEXT),
                 funding_url=FUNDING_URL,

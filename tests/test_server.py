@@ -32,7 +32,7 @@ def server() -> Iterator[tuple[str, demo.FrameBuffer]]:
     cfg: demo.Config = demo.Config(device="cpu", imgsz=416, targets=[4], tile=56, vis_every=1)
     cfg.port = 0
     buffer: demo.FrameBuffer = demo.FrameBuffer()
-    srv: ThreadingHTTPServer = demo.start_server(cfg, buffer, "test-info")
+    srv: ThreadingHTTPServer = demo.start_server(cfg, buffer, INFO)
     host, port = srv.server_address[:2]
     try:
         yield f"http://{host!s}:{port}", buffer
@@ -40,6 +40,10 @@ def server() -> Iterator[tuple[str, demo.FrameBuffer]]:
         srv.shutdown()
         srv.server_close()
         demo.StreamHandler.buffer, demo.StreamHandler.info = saved
+
+
+# Markup in the info line must arrive as text: it includes the WEIGHTS path.
+INFO: str = "yolo26n.pt | <b>&"
 
 
 def get(url: str) -> tuple[int, str, bytes]:
@@ -57,7 +61,7 @@ def test_page_carries_the_agpl_source_offer(server: tuple[str, demo.FrameBuffer]
     assert (status, ctype) == (200, "text/html")
     assert f'href="{demo.SOURCE_URL}"' in page
     assert "GNU AGPL v3" in page
-    assert "test-info" in page
+    assert html.escape(INFO) in page and INFO not in page
 
 
 def test_page_carries_the_funding_notice(server: tuple[str, demo.FrameBuffer]) -> None:

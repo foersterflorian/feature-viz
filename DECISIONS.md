@@ -293,10 +293,13 @@ case worth catching.
 
 **Decision (revised 2026-09-28).** The webcam (`SOURCE=0`) is the default.
 `SOURCE` selects another camera index, a video file or a stream URL. Before the
-model loads and before the server starts, `source_error()` checks that the
-source can be opened; if not, the demonstrator stops with exit code 1 and one
-line that says what to do — for a missing camera,
-`SOURCE=assets/sample.mp4 feature-viz`.
+model loads and before the server starts, `source_error()` checks the two cases
+it can judge — a camera index that does not open, a plain path that does not
+exist — and stops with exit code 1 and one line that says what to do; for a
+missing camera, `SOURCE=assets/sample.mp4 feature-viz`. Everything else
+ultralytics accepts (stream URLs, directories, globs such as `frames/*.jpg`,
+`screen`) is passed through unchecked. The first version of the check refused
+those as "not found"; the test review of 2026-09-28 caught it.
 
 **Why the webcam.** The live picture is what the demonstrator exists for; at a
 talk the camera is the point, the clip is the stand-in.
@@ -366,7 +369,8 @@ seam costs one frame: 43 ms on the GPU profile and 51 ms on the CPU profile
 against a median of 7.7 / 13.5 ms between detection results (measured on
 `assets/sample.mp4`, 2026-09-28).
 
-Only files loop. A camera or stream URL that stops delivering has failed, and
+Only single files loop; a directory or glob is shown once and then ends the
+run. A camera or stream URL that stops delivering has failed, and
 restarting it forever would hide that — the same reasoning as the missing
 fallback above. A file that yields no frames at all ends the run instead of
 restarting in a tight loop. There is no switch to turn looping off: a
