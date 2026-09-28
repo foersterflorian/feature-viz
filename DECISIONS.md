@@ -357,6 +357,27 @@ gives both one large foreground object and many small ones — which is what
 makes the depth gradient legible. Measured on the chosen still at `imgsz=640`:
 15 detections across four classes (train, truck, person, car).
 
+**Shutdown closes the frame reader (fixed 2026-09-28).** For a camera or a
+stream URL, ultralytics reads frames in a daemon thread (`LoadStreams`) and
+closes it only when the source runs dry — which a camera never does. Stopping
+the demonstrator with Ctrl+C or SIGTERM therefore left that thread inside
+`VideoCapture.read()` while the interpreter shut down, and the C++ runtime
+aborted: `terminate called without an active exception`, core dump, exit 134,
+after `[info] stopped` had already been printed. It happened on every webcam
+run, before and after the change of default source above, and with the webcam
+as default it was the normal end of every demonstration.
+
+`close_source()` in `main()`'s `finally` now calls ultralytics' own
+`LoadStreams.close()`, reached through `model.predictor.dataset`. Nothing is
+patched (§2), but that attribute is not a documented interface, so it is
+reached through a `getattr` chain: if a release moves it, the demonstrator
+falls back to the old crash on exit rather than failing to run. Closing the
+`predict()` generator was tried as well and does not help — the reader thread
+is independent of it; only `dataset.close()` does. Verified with a UVC webcam:
+six of six stops (three SIGINT, three SIGTERM) exit 0 within a second, against
+four of four crashes before. `tests/test_e2e.py` keeps it that way, marked
+`camera` and skipped where no webcam can be opened.
+
 **Webcam caveat.** Many UVC cameras default to YUYV rather than MJPG and drop
 to 5–10 FPS at 1080p regardless of model speed. This is the most common cause
 of "the demonstrator is not smooth". Note that `model.predict(source=0)` opens
@@ -425,14 +446,6 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
-- **Crash on shutdown with a webcam.** Stopping the demonstrator with
-  Ctrl+C or SIGTERM while it reads from a camera ends in `terminate called
-  without an active exception` and a core dump (exit 134), after `[info]
-  stopped` has been printed. Reproduced 2026-09-28 before and after the change
-  of default source in §8, so not caused by it — but since the webcam is now
-  the default, it is the normal way a demonstration ends. Suspected: the
-  camera reader thread inside ultralytics is still running when the
-  interpreter exits. Not investigated further.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -852,12 +865,13 @@ file it protects:
 | Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py` | nothing | §4, §5, §7, §8, §15, §17 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
-| End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test | §3, §8, §11, §17 |
+| End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 66 tests — runs in about 3 s, of
-which the no-camera subprocess test takes about 1.5 s; the two `weights`
-tests add about 11 s (measured 2026-09-28). Tests marked `weights` or `gpu` are skipped,
-not failed, when the checkpoint or CUDA is absent.
+Everything except the `weights` tests — 70 tests — runs in about 3 s, of
+which the no-camera subprocess test takes about 1.5 s; the four `weights`
+tests add about 19 s, 8 s of it the two camera stops (measured 2026-09-28).
+Tests marked `weights`, `gpu` or `camera` are skipped, not failed, when the checkpoint, CUDA or a webcam is absent; the
+camera is probed only if such a test was collected.
 
 **The key enabler: the model without weights.** `YOLO("yolo26n.yaml")` builds
 the yolo26n module chain with random weights from the YAML that ships inside

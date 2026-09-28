@@ -758,6 +758,29 @@ def _on_signal(signum: int, frame: FrameType | None) -> None:
     _stop.set()
 
 
+def close_source(model: YOLO) -> None:
+    """Stop ultralytics' frame reader before the interpreter exits.
+
+    For a camera or a stream URL, ultralytics reads frames in a daemon thread
+    (`LoadStreams`) and only closes it when the source runs dry - which a
+    camera never does. Leaving the loop by Ctrl+C or SIGTERM left that thread
+    inside `VideoCapture.read()` while the interpreter shut down, and the C++
+    runtime aborted: "terminate called without an active exception", exit
+    134 (DECISIONS.md §10).
+
+    Calls ultralytics' own `close()`; nothing is patched. `predictor.dataset`
+    is not a documented interface, hence the getattr chain: if a future
+    release moves it, this degrades to the old behaviour rather than failing.
+    File sources have no `close()` and need none. Closing the predict
+    generator instead was tried and does not help: the reader thread is
+    independent of it.
+    """
+    dataset: Any = getattr(getattr(model, "predictor", None), "dataset", None)
+    close: Any = getattr(dataset, "close", None)
+    if callable(close):
+        close()
+
+
 def main() -> None:
     cfg: Config = build_config()
 
@@ -839,6 +862,7 @@ def main() -> None:
                     break
     finally:
         tap.close()
+        close_source(model)
         if cfg.display_mode == "window":
             cv2.destroyAllWindows()
         print("[info] stopped")

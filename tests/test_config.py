@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import torch
@@ -102,3 +104,35 @@ def test_gamma_lut_is_a_monotonic_full_range_uint8_table(cpu_cfg: demo.Config) -
     assert np.all(np.diff(lut.astype(int)) >= 0)
     # gamma < 1 lifts the midtones (§4)
     assert lut[128] > 128
+
+
+# --------------------------------------------------------------------------
+# Shutdown (§10)
+# --------------------------------------------------------------------------
+class _Dataset:
+    def __init__(self) -> None:
+        self.closed: bool = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_close_source_closes_the_frame_reader() -> None:
+    """The camera case: ultralytics' LoadStreams has close(), and it must be
+    called, or its reader thread aborts the interpreter on exit."""
+    dataset: _Dataset = _Dataset()
+    model: SimpleNamespace = SimpleNamespace(predictor=SimpleNamespace(dataset=dataset))
+    demo.close_source(model)  # type: ignore[arg-type]
+    assert dataset.closed
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        SimpleNamespace(),  # predict never ran
+        SimpleNamespace(predictor=None),
+        SimpleNamespace(predictor=SimpleNamespace(dataset=object())),  # file source
+    ],
+)
+def test_close_source_tolerates_anything_without_close(model: SimpleNamespace) -> None:
+    demo.close_source(model)  # type: ignore[arg-type]

@@ -1,13 +1,15 @@
-"""The demonstrator as it is actually started (DECISIONS.md §3, §8, §11, §17).
+"""The demonstrator as it is actually started (DECISIONS.md §3, §8, §10, §11, §17).
 
 Runs go through a subprocess, exactly as `feature-viz` is launched, with the
 reduced profile so that the result does not depend on the GPU of the machine.
-The tests marked `weights` need the real yolo26n.pt and are skipped without it.
+The tests marked `weights` need the real yolo26n.pt, the one marked `camera` a
+webcam as well; each is skipped when its requirement is missing.
 """
 
 from __future__ import annotations
 
 import os
+import signal
 import re
 import socket
 import subprocess
@@ -156,3 +158,42 @@ def test_unusable_source_stops_before_anything_starts(tmp_path: Path) -> None:
     assert "SOURCE=assets/sample.mp4" in proc.stderr
     assert "Traceback" not in proc.stderr
     assert "[info] stream:" not in proc.stdout
+
+
+
+@pytest.mark.weights
+@pytest.mark.camera
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM], ids=["SIGINT", "SIGTERM"])
+def test_stopping_a_camera_run_exits_cleanly(tmp_path: Path, sig: signal.Signals) -> None:
+    """§10: Ctrl+C or SIGTERM during a webcam run used to abort the C++ runtime
+    ("terminate called without an active exception", exit 134), because
+    ultralytics' reader thread was still inside VideoCapture.read()."""
+    env: dict[str, str] = {
+        **os.environ,
+        "PYTHONUNBUFFERED": "1",
+        "FORCE_CPU": "1",
+        "SOURCE": "0",
+        "PORT": "0",
+        "WEIGHTS": str(WEIGHTS),
+    }
+    proc: subprocess.Popen[str] = subprocess.Popen(
+        [sys.executable, "-m", "feature_viz.demonstrator"],
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        port: int = stream_port(proc)
+        wait_for_health(port, proc)
+        first_frame(f"http://127.0.0.1:{port}/stream.mjpg", timeout=30)  # camera delivers
+        proc.send_signal(sig)
+        out, _ = proc.communicate(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    assert proc.returncode == 0, out
+    assert "terminate called" not in out
+    assert "[info] stopped" in out

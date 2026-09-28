@@ -48,7 +48,7 @@ SOURCE=assets/sample.mp4 feature-viz     # sample clip; webcam is the default
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
 
 mypy src/feature_viz/demonstrator.py tests --ignore-missing-imports
-pytest                                   # all tiers; `weights`/`gpu` skip if unavailable
+pytest                                   # all tiers; `weights`/`gpu`/`camera` skip if unavailable
 pytest -m "not weights"                  # without the checkpoint, ~3 s
 ```
 

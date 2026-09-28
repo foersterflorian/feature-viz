@@ -63,6 +63,7 @@ filterwarnings = [
 markers = [
     "weights: needs the real yolo26n.pt checkpoint; skipped when it is absent",
     "gpu: needs CUDA; skipped when it is absent",
+    "camera: needs a webcam at index 0; skipped when it cannot be opened",
 ]
 log_cli = true
 

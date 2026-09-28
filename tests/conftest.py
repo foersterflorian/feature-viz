@@ -23,11 +23,19 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     """Skip, rather than fail, what this machine cannot run."""
     no_weights = pytest.mark.skip(reason=f"checkpoint not found: {WEIGHTS}")
     no_gpu = pytest.mark.skip(reason="CUDA not available")
+    no_camera = pytest.mark.skip(reason="no camera at index 0")
+    # Probed only if a camera test was collected: opening the device costs time.
+    has_camera: bool | None = None
     for item in items:
         if "weights" in item.keywords and not WEIGHTS.is_file():
             item.add_marker(no_weights)
         if "gpu" in item.keywords and not torch.cuda.is_available():
             item.add_marker(no_gpu)
+        if "camera" in item.keywords:
+            if has_camera is None:
+                has_camera = demo.source_error("0") is None
+            if not has_camera:
+                item.add_marker(no_camera)
 
 
 @pytest.fixture(autouse=True)
