@@ -357,6 +357,23 @@ gives both one large foreground object and many small ones — which is what
 makes the depth gradient legible. Measured on the chosen still at `imgsz=640`:
 15 detections across four classes (train, truck, person, car).
 
+**Video files loop (2026-09-28).** A file source starts over when it ends;
+before, the run ended with the clip and the browser was left on its last
+frame. ultralytics has no loop option, so `results()` wraps `predict()` and
+calls it again for the next pass. Model, hooks, channel selection and the
+normalisation EMA carry over, so the restart does not show in the grid. The
+seam costs one frame: 43 ms on the GPU profile and 51 ms on the CPU profile
+against a median of 7.7 / 13.5 ms between detection results (measured on
+`assets/sample.mp4`, 2026-09-28).
+
+Only files loop. A camera or stream URL that stops delivering has failed, and
+restarting it forever would hide that — the same reasoning as the missing
+fallback above. A file that yields no frames at all ends the run instead of
+restarting in a tight loop. There is no switch to turn looping off: a
+demonstrator that ends with its clip has no use, and the tests stop runs with
+a signal. `tools/benchmark.py` and `tools/make_screenshot.py` call `predict()`
+themselves and still make exactly one pass.
+
 **Shutdown closes the frame reader (fixed 2026-09-28).** For a camera or a
 stream URL, ultralytics reads frames in a daemon thread (`LoadStreams`) and
 closes it only when the source runs dry — which a camera never does. Stopping
@@ -867,9 +884,10 @@ file it protects:
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 70 tests — runs in about 3 s, of
-which the no-camera subprocess test takes about 1.5 s; the four `weights`
-tests add about 19 s, 8 s of it the two camera stops (measured 2026-09-28).
+Everything except the `weights` tests — 74 tests — runs in about 3 s, of
+which the no-camera subprocess test takes about 1.5 s; the five `weights`
+tests add about 15 s, 7 s of it the two camera stops and 5 s the loop check on
+a generated 10-frame clip (measured 2026-09-28).
 Tests marked `weights`, `gpu` or `camera` are skipped, not failed, when the checkpoint, CUDA or a webcam is absent; the
 camera is probed only if such a test was collected.
 

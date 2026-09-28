@@ -758,6 +758,36 @@ def _on_signal(signum: int, frame: FrameType | None) -> None:
     _stop.set()
 
 
+def results(model: YOLO, cfg: Config) -> Iterator[Results]:
+    """Detection results for `cfg.source`, frame by frame. A video file
+    starts over when it ends; a camera or stream URL ends the run when it
+    stops delivering, because then it has failed (DECISIONS.md §8).
+
+    Each pass is a fresh `predict()` call - ultralytics has no loop option.
+    Model, hooks, channel selection and normalisation state carry over, so
+    the restart is invisible in the grid.
+    """
+    source: SourceSpec = int(cfg.source) if cfg.source.isdigit() else cfg.source
+    loop: bool = isinstance(source, str) and Path(source).is_file()
+    while True:
+        # With stream=True the call always yields an iterator of Results; the
+        # signature also admits the list and Tensor forms, which it cannot
+        # return here. Results is a TYPE_CHECKING import, hence the string.
+        stream: Iterator[Results] = cast(
+            "Iterator[Results]",
+            model.predict(
+                source=source, imgsz=cfg.imgsz, stream=True, verbose=False, device=cfg.device
+            ),
+        )
+        frames: int = 0
+        for result in stream:
+            frames += 1
+            yield result
+        # A file that yields nothing would otherwise spin here forever.
+        if not loop or frames == 0:
+            return
+
+
 def close_source(model: YOLO) -> None:
     """Stop ultralytics' frame reader before the interpreter exits.
 
@@ -814,16 +844,7 @@ def main() -> None:
         # The bound port, not cfg.port: with PORT=0 the OS picks one.
         print(f"[info] stream: http://localhost:{server.server_address[1]}/")
 
-    source: SourceSpec = int(cfg.source) if cfg.source.isdigit() else cfg.source
-    # With stream=True the call always yields an iterator of Results; the
-    # signature also admits the list and Tensor forms, which it cannot return
-    # here. Results is a TYPE_CHECKING import, hence the string target.
-    stream: Iterator[Results] = cast(
-        "Iterator[Results]",
-        model.predict(
-            source=source, imgsz=cfg.imgsz, stream=True, verbose=False, device=cfg.device
-        ),
-    )
+    stream: Iterator[Results] = results(model, cfg)
 
     t_prev: float = time.perf_counter()
     fps: float = 0.0

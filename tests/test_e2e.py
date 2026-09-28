@@ -116,12 +116,12 @@ def test_real_checkpoint_has_the_documented_targets(gpu_cfg: demo.Config) -> Non
 
 
 @pytest.mark.weights
-def test_sample_clip_streams_and_ends_cleanly(
+def test_sample_clip_streams_and_stops_cleanly(
     running: tuple[subprocess.Popen[str], int, Path],
 ) -> None:
     """Start to finish: the stream delivers a decodable canvas with the
-    funding strip at the bottom, and the process stops by itself at the end
-    of the clip with exit code 0."""
+    funding strip at the bottom, and SIGTERM ends the run with exit code 0.
+    (The clip loops, so it never ends by itself - see the next test.)"""
     proc, port, cwd = running
     wait_for_health(port, proc)
 
@@ -132,13 +132,58 @@ def test_sample_clip_streams_and_ends_cleanly(
     strip_h: int = demo.funding_strip(canvas.shape[1]).shape[0]
     assert canvas[-strip_h:, -20:].mean() > 245
 
-    out, _ = proc.communicate(timeout=120)
+    proc.send_signal(signal.SIGTERM)
+    out, _ = proc.communicate(timeout=30)
     assert proc.returncode == 0, out
     assert "[info] stopped" in out
 
     # §11: with an absolute WEIGHTS nothing is downloaded into the working
     # directory - which in a container would be a vanishing overlay layer.
     assert list(cwd.iterdir()) == []
+
+
+@pytest.mark.weights
+def test_video_file_loops(tmp_path: Path) -> None:
+    """§8: a file starts over instead of ending the run. A 10-frame clip is
+    through in well under a second, so still running and still streaming
+    after several seconds means it looped."""
+    clip: Path = tmp_path / "short.mp4"
+    writer: cv2.VideoWriter = cv2.VideoWriter(
+        str(clip), cv2.VideoWriter.fourcc(*"mp4v"), 30.0, (160, 128)
+    )
+    for i in range(10):
+        writer.write(np.full((128, 160, 3), 20 * i, dtype=np.uint8))
+    writer.release()
+
+    env: dict[str, str] = {
+        **os.environ,
+        "PYTHONUNBUFFERED": "1",
+        "FORCE_CPU": "1",
+        "SOURCE": str(clip),
+        "PORT": "0",
+        "WEIGHTS": str(WEIGHTS),
+    }
+    proc: subprocess.Popen[str] = subprocess.Popen(
+        [sys.executable, "-m", "feature_viz.demonstrator"],
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        port: int = stream_port(proc)
+        wait_for_health(port, proc)
+        time.sleep(3.0)
+        assert proc.poll() is None, "stopped at the end of the clip"
+        first_frame(f"http://127.0.0.1:{port}/stream.mjpg", timeout=10)
+        proc.send_signal(signal.SIGTERM)
+        out, _ = proc.communicate(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    assert proc.returncode == 0, out
 
 
 def test_unusable_source_stops_before_anything_starts(tmp_path: Path) -> None:
