@@ -804,7 +804,7 @@ def close_source(model: YOLO) -> None:
     camera never does. Leaving the loop by Ctrl+C or SIGTERM left that thread
     inside `VideoCapture.read()` while the interpreter shut down, and the C++
     runtime aborted: "terminate called without an active exception", exit
-    134 (DECISIONS.md §10).
+    134 (DECISIONS.md §8).
 
     Calls ultralytics' own `close()`; nothing is patched. `predictor.dataset`
     is not a documented interface, hence the getattr chain: if a future

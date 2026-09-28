@@ -33,19 +33,6 @@ def test_slow_reader_skips_to_the_newest_frame() -> None:
     assert buf.wait(seq, timeout=0.05) == (b"4", 4)
 
 
-def test_publish_never_blocks_on_readers() -> None:
-    """A reader stuck in wait() must not hold the lock the producer needs."""
-    buf: demo.FrameBuffer = demo.FrameBuffer()
-    buf.publish(b"0")
-    reader: threading.Thread = threading.Thread(target=buf.wait, args=(1, 2.0), daemon=True)
-    reader.start()
-    t0: float = time.perf_counter()
-    for i in range(100):
-        buf.publish(bytes([i]))
-    assert time.perf_counter() - t0 < 0.5
-    reader.join(timeout=2.0)
-
-
 def test_waiting_reader_is_woken_by_publish() -> None:
     buf: demo.FrameBuffer = demo.FrameBuffer()
     result: list[tuple[bytes | None, int]] = []

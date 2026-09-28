@@ -115,7 +115,7 @@ def test_gamma_lut_is_a_monotonic_full_range_uint8_table(cpu_cfg: demo.Config) -
 
 
 # --------------------------------------------------------------------------
-# Shutdown (§10)
+# Shutdown (§8)
 # --------------------------------------------------------------------------
 class _Dataset:
     def __init__(self) -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import http.client
+import time
 from collections.abc import Iterator
 from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
@@ -54,9 +55,12 @@ def get(url: str) -> tuple[int, str, bytes]:
         return err.code, "", b""
 
 
-def test_page_carries_the_agpl_source_offer(server: tuple[str, demo.FrameBuffer]) -> None:
+@pytest.mark.parametrize("path", ["/", "/index.html"])
+def test_page_carries_the_agpl_source_offer(
+    server: tuple[str, demo.FrameBuffer], path: str
+) -> None:
     """§16: AGPL §13 source offer and licence on the interactive interface."""
-    status, ctype, body = get(server[0] + "/")
+    status, ctype, body = get(server[0] + path)
     page: str = body.decode("utf-8")
     assert (status, ctype) == (200, "text/html")
     assert f'href="{demo.SOURCE_URL}"' in page
@@ -115,6 +119,30 @@ def test_stream_without_frame_source_is_503(
 ) -> None:
     monkeypatch.setattr(demo.StreamHandler, "buffer", None)
     assert get(server[0] + "/stream.mjpg")[0] == 503
+
+
+def test_closed_tab_does_not_disturb_the_server(
+    server: tuple[str, demo.FrameBuffer], capfd: pytest.CaptureFixture[str]
+) -> None:
+    """A viewer closing the tab mid-stream is the normal case (§7): the
+    handler must drop that connection quietly and keep serving others.
+    "Quietly" is the part to check - socketserver survives a failing handler
+    anyway, but prints its traceback to the console on every closed tab."""
+    url, buffer = server
+    buffer.publish(b"first")
+    with urlopen(url + "/stream.mjpg", timeout=5) as resp:
+        resp.readline()
+    for i in range(20):  # writes into the closed socket
+        buffer.publish(bytes([i]) * 70_000)
+        time.sleep(0.01)
+    time.sleep(0.2)  # let the handler thread hit the broken pipe and exit
+    assert "Traceback" not in capfd.readouterr().err
+    assert get(url + "/healthz")[::2] == (200, b"ok")
+    buffer.publish(b"after")
+    with urlopen(url + "/stream.mjpg", timeout=5) as resp:
+        for _ in range(4):
+            resp.readline()
+        assert resp.read(5) == b"after"
 
 
 def test_stream_delivers_the_published_frame_as_multipart(

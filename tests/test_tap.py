@@ -152,6 +152,29 @@ def test_channel_selection_is_fixed_after_calibration(
     assert {i: c.tolist() for i, c in renderer.channels.items()} == chosen
 
 
+def test_grid_pads_incomplete_panels_and_rows(yaml_model: YOLO, cpu_cfg: demo.Config) -> None:
+    """Neither padding path runs with today's profiles: every target has at
+    least 64 channels (an 8x8 panel) and fills its row. A change of
+    max_channels or targets reaches them, and must not break the grid:
+    10 tiles in a 4x3 panel, 4 panels in rows of 3."""
+    cpu_cfg.max_channels = 10
+    cpu_cfg.targets = [2, 4, 9, 16]
+    tap: demo.FeatureTap = demo.FeatureTap(yaml_model, cpu_cfg.targets)
+    try:
+        forward(yaml_model)
+        renderer: demo.GridRenderer = demo.GridRenderer(cpu_cfg, tap)
+        renderer.calibrate()
+        panel: demo.BGRImage = renderer.panel(2)
+        assert panel.shape[1] == 4 * cpu_cfg.tile
+        grid: demo.BGRImage = renderer.render()
+        # Two rows of three equal cells: the empty cell is padded, not dropped.
+        cell_w: int = (grid.shape[1] - 2 * 8) // 3
+        assert grid.shape[1] == 3 * cell_w + 2 * 8
+        assert grid.shape[0] % 2 == 0
+    finally:
+        tap.close()
+
+
 @pytest.mark.gpu
 def test_same_code_path_on_cuda(yaml_model: YOLO, gpu_cfg: demo.Config) -> None:
     """§5: the GPU profile runs the identical tap and renderer."""

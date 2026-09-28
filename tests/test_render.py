@@ -60,25 +60,20 @@ def test_scale_accepts_float16(cpu_cfg: demo.Config) -> None:
 # --------------------------------------------------------------------------
 # Captions and compose (§15)
 # --------------------------------------------------------------------------
-def test_caption_height_predicts_what_caption_adds() -> None:
-    """§15: compose() shrinks the frame by exactly caption_height() so that the
-    strip costs no canvas area. If the two disagree, the canvas grows - which
-    once cost 6 FPS."""
-    img: demo.BGRImage = bgr(100, 300)
-    out: demo.BGRImage = demo.caption(img, LINES)
-    assert out.shape[0] - img.shape[0] == demo.caption_height(LINES)
-    assert out.shape[1] == img.shape[1]
-
-
-def test_caption_leaves_the_image_untouched() -> None:
+def test_caption_stacks_a_strip_above_and_covers_nothing() -> None:
+    """§15: the text goes into a strip above the image, never onto it. That
+    the strip costs no canvas area is compose()'s job and tested there."""
     img: demo.BGRImage = bgr(100, 300, value=77)
     out: demo.BGRImage = demo.caption(img, LINES)
+    assert out.shape[1] == img.shape[1] and out.shape[0] > img.shape[0]
     assert np.array_equal(out[-100:], img)
 
 
 def test_compose_does_not_grow_the_canvas_for_the_caption() -> None:
-    """The grid is taller than frame plus caption: the grid must then set the
-    height and appear unscaled, pixel for pixel."""
+    """§15: compose() shrinks the frame by the caption height, so the strip
+    costs no canvas area - growing the canvas once cost 6 FPS. With the grid
+    taller than frame plus caption, the grid must set the height and appear
+    unscaled, pixel for pixel."""
     frame: demo.BGRImage = bgr(360, 640, value=90)
     grid: demo.BGRImage = np.random.default_rng(0).integers(
         0, 256, (900, 1500, 3), dtype=np.uint8
