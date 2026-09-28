@@ -25,9 +25,9 @@ Core decisions:
   * Output defaults to an MJPEG stream in the browser rather than
     cv2.imshow. That removes every dependency on X11/Wayland - relevant
     for running this in a container later on.
-  * The source is switchable via environment variable, with a video file
-    as fallback. The demonstrator therefore also starts when no camera
-    is attached.
+  * The webcam is the default source; SOURCE selects another camera or a
+    video file. A source that cannot be opened stops the demonstrator
+    before anything starts, with a message naming the sample clip.
 
 On the type annotations:
   * `from __future__ import annotations` turns every annotation into a
@@ -47,7 +47,7 @@ On the type annotations:
 Usage (console script from pyproject.toml; `pdm run feature-viz` outside an
 activated venv, `python -m feature_viz.demonstrator` as the long form):
     feature-viz                  # auto-detect, browser
-    SOURCE=0 feature-viz         # force webcam
+    SOURCE=assets/sample.mp4 feature-viz   # sample clip, no camera needed
     FORCE_CPU=1 feature-viz      # exercise the CPU path on a GPU box
     DISPLAY_MODE=window feature-viz
     DUMP_STRUCTURE=1 feature-viz # print the layer list
@@ -186,18 +186,43 @@ def build_config() -> Config:
     cfg.weights = os.getenv("WEIGHTS", cfg.weights)
     cfg.display_mode = os.getenv("DISPLAY_MODE", cfg.display_mode)
     cfg.port = int(os.getenv("PORT", str(cfg.port)))
-    cfg.source = os.getenv("SOURCE", "") or _default_source()
+    cfg.source = os.getenv("SOURCE", "") or cfg.source
     return cfg
 
 
-def _default_source() -> str:
-    """Without an explicit setting: prefer the sample video, else webcam.
+def source_error(source: str) -> str | None:
+    """Why `source` cannot be used, or None if it can.
 
-    This makes startup independent of attached hardware - whoever sees the
-    demonstrator for the first time gets a picture in any case.
+    Checked before the model loads and the server starts. Otherwise a missing
+    camera surfaces as an ultralytics traceback *after* the stream URL has
+    been printed - a page that never shows a picture, and no hint why.
+    There is deliberately no fallback to the sample clip: at a talk, a camera
+    that silently failed must not pass for a live picture (DECISIONS.md §8).
     """
-    sample: Path = Path(__file__).parent / "assets" / "sample.mp4"
-    return str(sample) if sample.exists() else "0"
+    if "://" in source:
+        return None  # stream URL; only ultralytics can tell
+    if source.isdigit():
+        # Opens the device once, briefly (about 40 ms), before ultralytics
+        # opens it for real. OpenCV's own backend warnings are silenced for
+        # the probe: a dozen lines of V4L2/FFMPEG noise would bury the one
+        # line below that says what to do.
+        level: int = cv2.utils.logging.getLogLevel()
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
+        try:
+            cap: cv2.VideoCapture = cv2.VideoCapture(int(source))
+            opened: bool = cap.isOpened()
+            cap.release()
+        finally:
+            cv2.utils.logging.setLogLevel(level)
+        if opened:
+            return None
+        return (
+            f"cannot open camera {source}. Without a camera, use the sample clip:\n"
+            f"    SOURCE=assets/sample.mp4 feature-viz"
+        )
+    if not Path(source).is_file():
+        return f"source not found: {source} (relative to {Path.cwd()})"
+    return None
 
 
 # ==========================================================================
@@ -735,6 +760,11 @@ def _on_signal(signum: int, frame: FrameType | None) -> None:
 
 def main() -> None:
     cfg: Config = build_config()
+
+    error: str | None = source_error(cfg.source)
+    if error is not None:
+        print(f"[error] {error}", file=sys.stderr)
+        raise SystemExit(1)
 
     signal.signal(signal.SIGINT, _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)

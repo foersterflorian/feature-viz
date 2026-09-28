@@ -6,7 +6,8 @@ talks and handover, not a library.
 
 ```bash
 pdm install
-pdm run feature-viz          # auto profile, stream on http://localhost:8080/
+pdm run feature-viz          # webcam, stream on http://localhost:8080/
+SOURCE=assets/sample.mp4 pdm run feature-viz   # no camera: the sample clip
 ```
 
 `DECISIONS.md` records why the code is shaped the way it is, including the

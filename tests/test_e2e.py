@@ -1,8 +1,8 @@
 """The demonstrator as it is actually started (DECISIONS.md §3, §8, §11, §17).
 
-Needs the real yolo26n.pt; skipped without it. The run itself goes through a
-subprocess, exactly as `feature-viz` is launched, with the reduced profile so
-that the result does not depend on the GPU of the machine.
+Runs go through a subprocess, exactly as `feature-viz` is launched, with the
+reduced profile so that the result does not depend on the GPU of the machine.
+The tests marked `weights` need the real yolo26n.pt and are skipped without it.
 """
 
 from __future__ import annotations
@@ -24,8 +24,6 @@ from ultralytics import YOLO
 
 from feature_viz import demonstrator as demo
 from tests.support import EXPECTED_TARGETS, ROOT, WEIGHTS
-
-pytestmark = pytest.mark.weights
 
 SAMPLE: Path = ROOT / "assets" / "sample.mp4"
 
@@ -87,6 +85,7 @@ def wait_for_health(port: int, proc: subprocess.Popen[str], timeout: float = 60.
     pytest.fail("demonstrator did not come up")
 
 
+@pytest.mark.weights
 def test_real_checkpoint_has_the_documented_targets(gpu_cfg: demo.Config) -> None:
     """§3: verified against the YAML build elsewhere; this is the checkpoint
     that is actually shown."""
@@ -97,6 +96,7 @@ def test_real_checkpoint_has_the_documented_targets(gpu_cfg: demo.Config) -> Non
         tap.close()
 
 
+@pytest.mark.weights
 def test_sample_clip_streams_and_ends_cleanly(
     running: tuple[subprocess.Popen[str], int, Path],
 ) -> None:
@@ -120,3 +120,22 @@ def test_sample_clip_streams_and_ends_cleanly(
     # §11: with an absolute WEIGHTS nothing is downloaded into the working
     # directory - which in a container would be a vanishing overlay layer.
     assert list(cwd.iterdir()) == []
+
+
+def test_unusable_source_stops_before_anything_starts(tmp_path: Path) -> None:
+    """§8: a missing camera ends the run with one readable line and exit 1 -
+    before the model loads (hence no `weights` mark) and before the server
+    prints a URL that would never show a picture."""
+    env: dict[str, str] = {**os.environ, "SOURCE": "99", "PORT": str(free_port())}
+    proc: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, "-m", "feature_viz.demonstrator"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 1
+    assert "SOURCE=assets/sample.mp4" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert "[info] stream:" not in proc.stdout

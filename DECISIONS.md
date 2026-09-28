@@ -291,14 +291,41 @@ case worth catching.
 
 ## 8. Source selection and the sample video
 
-**Decision.** `SOURCE` selects the input. With no explicit value the code
-prefers `assets/sample.mp4` and only falls back to the webcam.
+**Decision (revised 2026-09-28).** The webcam (`SOURCE=0`) is the default.
+`SOURCE` selects another camera index, a video file or a stream URL. Before the
+model loads and before the server starts, `source_error()` checks that the
+source can be opened; if not, the demonstrator stops with exit code 1 and one
+line that says what to do — for a missing camera,
+`SOURCE=assets/sample.mp4 feature-viz`.
 
-**Why.** It makes the webcam an optional extra rather than a startup
-requirement. Anyone can clone the repository on any machine and see the
-demonstrator work within minutes, with no device paths, no group permissions
-and no camera. That is the difference between "it doesn't run and nobody knows
-why" and "it runs, the camera just isn't wired up yet".
+**Why the webcam.** The live picture is what the demonstrator exists for; at a
+talk the camera is the point, the clip is the stand-in.
+
+**Why no automatic fallback to the clip.** If the camera fails to open at a
+talk and the clip starts silently instead, the failure is discovered in front
+of the audience — or not at all, with the clip passing for a live picture. A
+refusal before anything starts is the honest behaviour. The concern that led
+to the original decision (below) is met by the error message instead: a fresh
+clone without a camera is one copy-paste away from a running demonstrator.
+
+**Why check up front.** Without the check, a missing camera surfaced as an
+ultralytics `ConnectionError` traceback — *after* the stream URL had been
+printed, so the browser showed a page that never got a picture. The check opens
+the device once and releases it, about 40 ms (measured on a UVC webcam,
+2026-09-28), with OpenCV's backend warnings silenced for its duration so that
+they do not bury the message.
+
+**Rejected: the sample clip as default** (the original decision, 2026-09-21).
+It made the webcam an optional extra rather than a startup requirement: anyone
+could clone the repository and see the demonstrator work with no device paths,
+no group permissions and no camera. It was never actually in effect: the code
+looked for `src/feature_viz/assets/sample.mp4` while the clip lives in the
+repository's `assets/`, so the webcam was the de facto default all along —
+found by the test suite (§18). Making it work would have meant either
+resolving a repository path, which breaks for a wheel install, or moving
+3.4 MB of video into every installed package. With the webcam as default the
+clip is a repository asset for development and tooling, and stays out of the
+package.
 
 **The sample clip exists** (added 2026-09-22). `assets/sample.mp4` is ten
 seconds of 1280x720 H.264 footage generated from a single CC0 still by
@@ -329,16 +356,6 @@ easing in from zero (§4), so a still would have been correctly normalised.
 gives both one large foreground object and many small ones — which is what
 makes the depth gradient legible. Measured on the chosen still at `imgsz=640`:
 15 detections across four classes (train, truck, person, car).
-
-**Known defect (found 2026-09-28 while writing tests).** The fallback does
-not work as described. `_default_source()` looks for
-`src/feature_viz/assets/sample.mp4`, but the clip lives in the repository's
-`assets/`, so without `SOURCE` the demonstrator falls back to the webcam.
-`tests/test_config.py::test_default_source_is_the_sample_clip` records this
-as a strict `xfail`: it turns into a failure the moment the defect is fixed,
-so the marker cannot outlive the bug. Not fixed yet, because the fix is a
-decision — resolving the repository path works from a checkout but not from a
-wheel, while moving the clip into the package puts 3.4 MB into every install.
 
 **Webcam caveat.** Many UVC cameras default to YUYV rather than MJPG and drop
 to 5–10 FPS at 1080p regardless of model speed. This is the most common cause
@@ -408,8 +425,14 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
-- **Default source.** §8 promises the sample clip without `SOURCE`; the code
-  falls back to the webcam instead. Known defect, not yet fixed — see §8.
+- **Crash on shutdown with a webcam.** Stopping the demonstrator with
+  Ctrl+C or SIGTERM while it reads from a camera ends in `terminate called
+  without an active exception` and a core dump (exit 134), after `[info]
+  stopped` has been printed. Reproduced 2026-09-28 before and after the change
+  of default source in §8, so not caused by it — but since the webcam is now
+  the default, it is the normal way a demonstration ends. Suspected: the
+  camera reader thread inside ultralytics is still running when the
+  interpreter exits. Not investigated further.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -826,13 +849,14 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py` | nothing | §4, §5, §7, §8, §11, §15, §17 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py` | nothing | §4, §5, §7, §8, §15, §17 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
-| End-to-end | `test_e2e.py` | `yolo26n.pt` | §3, §8, §11, §17 |
+| End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test | §3, §8, §11, §17 |
 
-The first three tiers run in under 2 s (60 tests, measured 2026-09-28).
-End-to-end adds about 11 s. Tests marked `weights` or `gpu` are skipped,
+Everything except the `weights` tests — 66 tests — runs in about 3 s, of
+which the no-camera subprocess test takes about 1.5 s; the two `weights`
+tests add about 11 s (measured 2026-09-28). Tests marked `weights` or `gpu` are skipped,
 not failed, when the checkpoint or CUDA is absent.
 
 **The key enabler: the model without weights.** `YOLO("yolo26n.yaml")` builds
@@ -875,8 +899,8 @@ cannot change what a test sees. The HTTP tests share one server per module:
 `shutdown()` waits out the 0.5 s poll interval of `serve_forever`, which per
 test dominated the run time. mypy covers the tests as well.
 
-**Found while writing them.** The §8 default-source defect (recorded as a
-strict `xfail`). Also, with `PORT=0` the startup line prints port 0 instead of
+**Found while writing them.** The §8 default source never worked as
+documented; that led to the revised decision in §8. Also, with `PORT=0` the startup line prints port 0 instead of
 the port actually bound — cosmetic, since nobody runs it that way outside
 tests.
 

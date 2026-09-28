@@ -1,14 +1,13 @@
-"""Profiles and environment handling (DECISIONS.md §5, §8, §11)."""
+"""Profiles, environment and source handling (DECISIONS.md §5, §8, §11)."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 
 from feature_viz import demonstrator as demo
+from tests.support import ROOT
 
 
 def test_gpu_profile_when_cuda_is_available(gpu_cfg: demo.Config) -> None:
@@ -64,23 +63,36 @@ def test_environment_overrides(monkeypatch: pytest.MonkeyPatch, cpu_cfg: demo.Co
     )
 
 
-def test_empty_source_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_webcam_is_the_default_source(cpu_cfg: demo.Config) -> None:
+    """§8: the live picture is what the demonstrator is for."""
+    assert cpu_cfg.source == "0"
+
+
+def test_empty_source_means_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setenv("SOURCE", "")
-    assert demo.build_config().source == demo._default_source()
+    assert demo.build_config().source == "0"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="§8 promises the sample clip, but _default_source() looks in "
-    "src/feature_viz/assets/ while the clip lives in the repository's assets/",
-)
-def test_default_source_is_the_sample_clip() -> None:
-    """§8: without SOURCE, a fresh clone must show the sample, not wait for
-    a webcam."""
-    source: str = demo._default_source()
-    assert source.endswith("sample.mp4")
-    assert Path(source).is_file()
+def test_existing_file_is_a_valid_source() -> None:
+    assert demo.source_error(str(ROOT / "assets" / "sample.mp4")) is None
+
+
+def test_missing_file_is_reported() -> None:
+    error: str | None = demo.source_error("no/such/clip.mp4")
+    assert error is not None and "no/such/clip.mp4" in error
+
+
+def test_missing_camera_points_at_the_sample_clip() -> None:
+    """§8: no silent fallback, but the one line that gets a fresh clone
+    running. Index 99 exists on no machine."""
+    error: str | None = demo.source_error("99")
+    assert error is not None
+    assert "SOURCE=assets/sample.mp4" in error
+
+
+def test_stream_urls_are_left_to_ultralytics() -> None:
+    assert demo.source_error("rtsp://camera.local/stream") is None
 
 
 def test_gamma_lut_is_a_monotonic_full_range_uint8_table(cpu_cfg: demo.Config) -> None:

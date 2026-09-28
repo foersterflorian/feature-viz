@@ -40,16 +40,16 @@ those as open tasks, not as facts.
 ## Commands
 
 ```bash
-feature-viz                              # auto profile, stream on :8080
+feature-viz                              # webcam, auto profile, stream on :8080
 DUMP_STRUCTURE=1 feature-viz             # print the module list with targets marked
 FORCE_CPU=1 feature-viz                  # exercise the reduced profile on a GPU box
 DISPLAY_MODE=window feature-viz
-SOURCE=0 feature-viz                     # force webcam
+SOURCE=assets/sample.mp4 feature-viz     # sample clip; webcam is the default
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
 
 mypy src/feature_viz/demonstrator.py tests --ignore-missing-imports
 pytest                                   # all tiers; `weights`/`gpu` skip if unavailable
-pytest -m "not weights"                  # fast tiers only, < 2 s
+pytest -m "not weights"                  # without the checkpoint, ~3 s
 ```
 
 `feature-viz` is the console script declared in `pyproject.toml`. Outside an
