@@ -787,8 +787,9 @@ def main() -> None:
     buffer: FrameBuffer | None = None
     if cfg.display_mode == "mjpeg":
         buffer = FrameBuffer()
-        start_server(cfg, buffer, info)
-        print(f"[info] stream: http://localhost:{cfg.port}/")
+        server: ThreadingHTTPServer = start_server(cfg, buffer, info)
+        # The bound port, not cfg.port: with PORT=0 the OS picks one.
+        print(f"[info] stream: http://localhost:{server.server_address[1]}/")
 
     source: SourceSpec = int(cfg.source) if cfg.source.isdigit() else cfg.source
     # With stream=True the call always yields an iterator of Results; the

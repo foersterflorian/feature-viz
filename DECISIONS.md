@@ -900,9 +900,9 @@ cannot change what a test sees. The HTTP tests share one server per module:
 test dominated the run time. mypy covers the tests as well.
 
 **Found while writing them.** The §8 default source never worked as
-documented; that led to the revised decision in §8. Also, with `PORT=0` the startup line prints port 0 instead of
-the port actually bound — cosmetic, since nobody runs it that way outside
-tests.
+documented; that led to the revised decision in §8. Also, with `PORT=0` the startup line printed port 0 instead of
+the port actually bound; it now prints the bound port, and the end-to-end test
+starts with `PORT=0` and connects to whatever that line names.
 
 **CI** (GitHub Actions) was discussed and deferred. The first three tiers
 would run on a free CPU runner, but the locked install pulls several GB of CUDA

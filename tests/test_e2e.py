@@ -8,6 +8,7 @@ The tests marked `weights` need the real yolo26n.pt and are skipped without it.
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -46,13 +47,17 @@ def first_frame(url: str, timeout: float) -> bytes:
 
 @pytest.fixture
 def running(tmp_path: Path) -> Iterator[tuple[subprocess.Popen[str], int, Path]]:
-    """The demonstrator on the sample clip, started in an empty directory."""
-    port: int = free_port()
+    """The demonstrator on the sample clip, started in an empty directory.
+
+    PORT=0 lets the OS choose, and the port is taken from the startup line -
+    which is therefore checked too: it must name the port actually bound.
+    """
     env: dict[str, str] = {
         **os.environ,
+        "PYTHONUNBUFFERED": "1",  # the startup line must arrive while it runs
         "FORCE_CPU": "1",
         "SOURCE": str(SAMPLE),
-        "PORT": str(port),
+        "PORT": "0",
         "WEIGHTS": str(WEIGHTS),
         "DISPLAY_MODE": "mjpeg",
     }
@@ -65,11 +70,23 @@ def running(tmp_path: Path) -> Iterator[tuple[subprocess.Popen[str], int, Path]]
         text=True,
     )
     try:
-        yield proc, port, tmp_path
+        yield proc, stream_port(proc), tmp_path
     finally:
         if proc.poll() is None:
             proc.kill()
         proc.wait()
+
+
+def stream_port(proc: subprocess.Popen[str]) -> int:
+    """Reads stdout up to the `[info] stream:` line and returns its port."""
+    assert proc.stdout is not None
+    seen: list[str] = []
+    for line in proc.stdout:
+        seen.append(line)
+        match: re.Match[str] | None = re.match(r"\[info\] stream: http://localhost:(\d+)/", line)
+        if match:
+            return int(match.group(1))
+    pytest.fail("no stream line before exit:\n" + "".join(seen))
 
 
 def wait_for_health(port: int, proc: subprocess.Popen[str], timeout: float = 60.0) -> None:
