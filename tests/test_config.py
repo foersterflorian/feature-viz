@@ -96,7 +96,12 @@ def test_missing_camera_points_at_the_sample_clip() -> None:
 
 @pytest.mark.parametrize(
     "source",
-    ["rtsp://camera.local/stream", str(ROOT / "assets"), str(ROOT / "assets" / "*.jpg"), "screen"],
+    [
+        "rtsp://camera.local/stream",
+        str(ROOT / "assets"),
+        str(ROOT / "assets" / "*.jpg"),
+        "screen",
+    ],
     ids=["url", "directory", "glob", "screen"],
 )
 def test_other_ultralytics_sources_are_passed_through(source: str) -> None:

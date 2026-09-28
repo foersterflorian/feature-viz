@@ -36,7 +36,11 @@ def test_logos_load_from_the_package(name: str) -> None:
 
 @pytest.mark.parametrize("width", [3790, 2627, 1200])
 def test_wrap_keeps_every_word_and_fits_the_width(width: int) -> None:
-    lines: list[str] = demo._wrap(demo.FUNDING_TEXT, demo.FUNDING_TEXT_SCALE, width)
+    # _wrap is private, but its contract - no word lost, no line too wide -
+    # is exactly what the strip depends on.
+    lines: list[str] = demo._wrap(  # noqa: SLF001
+        demo.FUNDING_TEXT, demo.FUNDING_TEXT_SCALE, width
+    )
     assert " ".join(lines).split() == demo.FUNDING_TEXT.split()
     for line in lines:
         w: int = cv2.getTextSize(line, demo.FONT, demo.FUNDING_TEXT_SCALE, 1)[0][0]

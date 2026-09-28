@@ -84,10 +84,14 @@ def ffmpeg_command() -> list[str]:
 
 def main() -> int:
     if shutil.which("ffmpeg") is None:
-        print("[error] ffmpeg not found on PATH; see this module's docstring", file=sys.stderr)
+        print(
+            "[error] ffmpeg not found on PATH; see this module's docstring", file=sys.stderr
+        )
         return 1
 
-    still: BGRImage | None = cast("BGRImage | None", cv2.imread(str(SOURCE), cv2.IMREAD_COLOR))
+    still: BGRImage | None = cast(
+        "BGRImage | None", cv2.imread(str(SOURCE), cv2.IMREAD_COLOR)
+    )
     if still is None:
         print(f"[error] cannot read {SOURCE}", file=sys.stderr)
         return 1

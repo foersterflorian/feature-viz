@@ -15,16 +15,17 @@ from torch import nn
 from ultralytics import YOLO
 
 from feature_viz import demonstrator as demo
-
 from tests.support import ENV_VARS, WEIGHTS
 
 
+# trylast: runs after `-m` has deselected, so the camera is only probed when a
+# camera test will actually run - the probe opens the device.
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip, rather than fail, what this machine cannot run."""
     no_weights = pytest.mark.skip(reason=f"checkpoint not found: {WEIGHTS}")
     no_gpu = pytest.mark.skip(reason="CUDA not available")
     no_camera = pytest.mark.skip(reason="no camera at index 0")
-    # Probed only if a camera test was collected: opening the device costs time.
     has_camera: bool | None = None
     for item in items:
         if "weights" in item.keywords and not WEIGHTS.is_file():

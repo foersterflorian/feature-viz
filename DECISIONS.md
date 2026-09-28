@@ -883,15 +883,15 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py` | nothing | §4, §5, §7, §8, §15, §17 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py` | nothing | §4, §5, §7, §8, §14, §15, §17 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 74 tests — runs in about 3 s, of
+Everything except the `weights` tests — 81 tests — runs in about 3.5 s, of
 which the no-camera subprocess test takes about 1.5 s; the five `weights`
 tests add about 15 s, 7 s of it the two camera stops and 5 s the loop check on
-a generated 10-frame clip (measured 2026-09-28).
+a generated 10-frame clip (measured 2026-09-28, after the review below).
 Tests marked `weights`, `gpu` or `camera` are skipped, not failed, when the checkpoint, CUDA or a webcam is absent; the
 camera is probed only if such a test was collected.
 
@@ -924,6 +924,25 @@ behaviour stays consistent.
   mean anything or flaky. `tools/benchmark.py` measures and prints instead.
 - *Visual quality.* That remains a look at the stills from
   `tools/make_screenshot.py`.
+- *`DISPLAY_MODE=window`.* `cv2.imshow` needs a display and the ESC key
+  cannot be pressed headless. The mode shares everything up to the final
+  `imshow` with the stream path, which is tested.
+- *`DUMP_STRUCTURE=1` through `main()`.* `dump_structure()` itself is tested;
+  the environment switch in front of it is one line.
+- *Running the tools.* They are import-checked, which catches a rename in the
+  demonstrator; running them needs the checkpoint and writes files, and is
+  left to their own use.
+
+**Reviewed 2026-09-28.** A review of the suite against the code found three
+tests that proved less than they claimed — a caption test that compared
+`caption_height()` with itself, a loop test that accepted a stale buffered
+frame, a lock test that could not fail — and was corrected accordingly. It
+also found two defects in the code: `source_error()` refused directories,
+globs and `screen` (§8), and the page inserted the info line unescaped. Each
+test added then was checked to fail with its code path broken; the closed-tab
+test, for one, passed without the `except` it was meant to guard until it
+also asserted a quiet console. Only paths a plausible change would reach got
+new tests — no coverage target was set.
 
 **Mechanics.** No new dependencies: HTTP tests use `urllib` and
 `http.client`, test images come from NumPy. Shared constants and helpers are in

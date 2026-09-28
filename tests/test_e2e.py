@@ -29,6 +29,7 @@ from feature_viz import demonstrator as demo
 from tests.support import EXPECTED_TARGETS, ROOT, WEIGHTS
 
 SAMPLE: Path = ROOT / "assets" / "sample.mp4"
+STREAM_LINE: re.Pattern[str] = re.compile(r"\[info\] stream: http://localhost:(\d+)/")
 
 
 def free_port() -> int:
@@ -93,7 +94,7 @@ def stream_port(proc: subprocess.Popen[str]) -> int:
     seen: list[str] = []
     for line in proc.stdout:
         seen.append(line)
-        match: re.Match[str] | None = re.match(r"\[info\] stream: http://localhost:(\d+)/", line)
+        match: re.Match[str] | None = STREAM_LINE.match(line)
         if match:
             return int(match.group(1))
     pytest.fail("no stream line before exit:\n" + "".join(seen))

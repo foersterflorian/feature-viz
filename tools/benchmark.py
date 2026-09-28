@@ -91,7 +91,9 @@ def run(cfg: demo.Config, warmup: int) -> tuple[list[float], tuple[int, int]]:
 
 
 def main() -> int:
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description=__doc__.split("\n")[0]
+    )
     parser.add_argument("--runs", type=int, default=1, help="passes over the source")
     parser.add_argument("--warmup", type=int, default=60, help="frames discarded per pass")
     parser.add_argument(

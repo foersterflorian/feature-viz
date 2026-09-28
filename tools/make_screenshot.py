@@ -28,6 +28,7 @@ from typing import Iterator, cast
 
 import cv2
 import numpy as np
+from ultralytics import YOLO
 
 from feature_viz.demonstrator import (
     BGRImage,
@@ -38,7 +39,6 @@ from feature_viz.demonstrator import (
     compose,
     funding_strip,
 )
-from ultralytics import YOLO
 
 ROOT: Path = Path(__file__).resolve().parent.parent
 DOCS: Path = ROOT / "docs"

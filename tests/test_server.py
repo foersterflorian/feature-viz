@@ -81,7 +81,9 @@ def test_page_carries_the_funding_notice(server: tuple[str, demo.FrameBuffer]) -
     ("name", "ctype"),
     [(n, "image/jpeg" if n.endswith(".jpg") else "image/png") for n, _ in demo.FUNDING_LOGOS],
 )
-def test_logos_are_served(server: tuple[str, demo.FrameBuffer], name: str, ctype: str) -> None:
+def test_logos_are_served(
+    server: tuple[str, demo.FrameBuffer], name: str, ctype: str
+) -> None:
     status, served_type, body = get(f"{server[0]}/funding/{name}")
     assert (status, served_type) == (200, ctype)
     assert body == demo.funding_asset(name)

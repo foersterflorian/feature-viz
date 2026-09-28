@@ -33,7 +33,8 @@ def tensors(out: object) -> Iterator[torch.Tensor]:
 
 def hook_count(model: YOLO) -> int:
     net: nn.Module = cast(nn.Module, model.model)
-    return sum(len(m._forward_hooks) for m in net.modules())
+    # torch offers no public way to count registered hooks.
+    return sum(len(m._forward_hooks) for m in net.modules())  # noqa: SLF001
 
 
 # --------------------------------------------------------------------------
