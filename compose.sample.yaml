@@ -1,0 +1,9 @@
+# GPU without a camera: the sample clip that ships in the image, looping.
+#   docker compose -f compose.yaml -f compose.sample.yaml up
+services:
+  feature-viz:
+    environment:
+      SOURCE: /opt/feature-viz/assets/sample.mp4
+    devices: !override
+      - nvidia.com/gpu=all
+    group_add: !reset []

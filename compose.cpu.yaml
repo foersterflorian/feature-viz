@@ -1,0 +1,11 @@
+# No GPU, no camera: the reduced CPU profile on the sample clip. Without a
+# CUDA device the demonstrator picks the CPU profile by itself - the same code
+# path as on the GPU (DECISIONS.md §5). For functional tests on machines
+# without an NVIDIA card, or to check the fallback on one that has it.
+#   docker compose -f compose.yaml -f compose.cpu.yaml up
+services:
+  feature-viz:
+    environment:
+      SOURCE: /opt/feature-viz/assets/sample.mp4
+    devices: !reset []
+    group_add: !reset []

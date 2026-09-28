@@ -133,6 +133,12 @@ filename = "pyproject.toml"
 search = "version = \"{current_version}\""
 replace = "version = \"{new_version}\""
 
+# The image tag, so that a saved archive names the version it contains.
+[[tool.bumpversion.files]]
+filename = "compose.yaml"
+search = "image: feature-viz:{current_version}"
+replace = "image: feature-viz:{new_version}"
+
 
 [tool.pdm]
 distribution = true

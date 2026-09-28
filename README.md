@@ -13,6 +13,30 @@ SOURCE=assets/sample.mp4 pdm run feature-viz   # no camera: the sample clip
 `DECISIONS.md` records why the code is shaped the way it is, including the
 alternatives that were rejected. Read it before changing anything structural.
 
+## Container
+
+The image runs exactly the versions in `pdm.lock`, with the weights built in,
+and needs no network at runtime. Host requirements: Docker Engine ≥ 28.2 (the
+native engine, not Docker Desktop), NVIDIA driver ≥ 580, and
+nvidia-container-toolkit ≥ 1.18 with a CDI spec
+(`sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`).
+
+```bash
+cp .env.example .env         # set CAMERA_DEVICE and VIDEO_GID for this machine
+docker compose up --build    # GPU + webcam, stream on http://localhost:8080/
+docker compose -f compose.yaml -f compose.sample.yaml up   # GPU, sample clip
+docker compose -f compose.yaml -f compose.cpu.yaml up      # no GPU, sample clip
+```
+
+To move or archive the image as one self-contained file:
+
+```bash
+docker save feature-viz:0.1.0 | zstd -T0 -o feature-viz-0.1.0.tar.zst
+zstd -dc feature-viz-0.1.0.tar.zst | docker load
+```
+
+Details and rationale: `DECISIONS.md` §9.
+
 ## Funding
 
 The [K-M-I research and development project](https://kmi-netzwerk.org/kmi-projekt/) is funded as part of the “Future of Work: Regional Competence Centers for Labor Research – Artificial Intelligence” funding initiative within the “Innovations for Tomorrow's Production, Services, and Work” program of the German Federal Ministry of Research, Technology and Space (BMFTR) and is supervised by the Project Management Agency Karlsruhe (PTKA).

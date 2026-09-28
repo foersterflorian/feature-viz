@@ -47,6 +47,9 @@ DISPLAY_MODE=window feature-viz
 SOURCE=assets/sample.mp4 feature-viz     # sample clip; webcam is the default
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
 
+docker compose up --build                # container: GPU + webcam (DECISIONS.md §9)
+docker compose -f compose.yaml -f compose.cpu.yaml up   # container, CPU, sample clip
+
 mypy src/feature_viz/demonstrator.py tests --ignore-missing-imports
 ruff check src tests tools
 pytest                                   # all tiers; `weights`/`gpu`/`camera` skip if unavailable

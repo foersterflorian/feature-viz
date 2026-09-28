@@ -1,0 +1,9 @@
+# Allow-list: the build context holds only what the image needs. Everything
+# else - .venv (6 GB), .git, local *.pt files, docs/*.png - stays out.
+*
+!pyproject.toml
+!pdm.lock
+!src/
+!assets/sample.mp4
+!LICENSE
+**/__pycache__

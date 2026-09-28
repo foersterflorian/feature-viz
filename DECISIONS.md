@@ -413,47 +413,120 @@ MJPG, explicit FPS) and pass frames to `predict` as arrays.
 
 ---
 
-## 9. Containerisation (planned, not yet implemented)
+## 9. Containerisation
 
 **Goal.** Reproducibility for the project record, and the ability to run on
 other machines at the chair. A `requirements.txt` is only reproducible for as
 long as PyPI still serves those versions and the wheels still match the local
 CUDA — which is precisely what makes a three-year-old demonstrator unusable.
+A saved image does not have that problem.
 
-**Decisions taken so far:**
+**Decision.** `Dockerfile` and `compose.yaml` in the repository root; `docker
+compose up` starts the demonstration setup. Implemented and verified
+2026-09-28 on the development machine.
 
-- **Pin a versioned Ultralytics image tag, not `latest`.** `latest` tracks the
-  most recent main-branch build; versioned tags are bound to a release. A
-  demonstrator that behaves differently after a rebuild defeats the purpose.
-- **Use CDI device requests (`--device nvidia.com/gpu=all`), not `--gpus all`.**
-  The legacy flag can lose GPU access when the host reloads systemd during
-  routine package updates, surfacing as `Failed to initialize NVML: Unknown
-  Error`. Requires Docker ≥ 28.2.0 and nvidia-container-toolkit ≥ 1.18. This
-  failure mode likes to appear in the middle of a demonstration.
-- **Bake the weights into the image at a fixed absolute path** and point
-  `WEIGHTS` at it. See §11 — by default they land in the current working
-  directory, which in a container is an overlay layer that disappears with
-  `--rm`, leaving a demonstrator that cannot start without network access.
-- **Set `YOLO_CONFIG_DIR`** (e.g. `/tmp/ultralytics`). If the container runs as
-  a UID without a writable home, Ultralytics cannot create `settings.json` and
-  warns on every start.
-- **`--ipc=host`**, otherwise PyTorch can stall on the default shared-memory
-  limit.
-- **Camera device**, when used: prefer `/dev/v4l/by-id/...` over `/dev/video0`.
-  UVC cameras expose several `videoN` nodes (the second is often a metadata
-  node with no image) and the numbering can shift across reboots. Add
-  `--group-add video` if not running as root.
-- **Single entry point.** `docker compose up` and nothing else. A container
-  nobody knows how to start is as dead as an orphaned venv.
-- **Archive with `docker save`.** The resulting tarball is a complete runnable
-  system, independent of whether PyPI, Docker Hub or the Ultralytics weights
-  URL still resolve in five years. As a project artefact this is far more
-  robust than a dependency list.
+**The image runs what the tests ran.** Base is `python:3.12-slim`, pinned by
+digest; on top of it goes exactly what `pdm.lock` pins, installed with
+`pip --require-hashes` from a `pdm export`. No other image is involved:
+
+- torch's PyPI wheels carry their own CUDA runtime (CUDA 13.0 as `nvidia-*`
+  packages), so no CUDA base image is needed. The host contributes only the
+  driver, which must be **≥ 580**.
+- A prebuilt framework image (Ultralytics, PyTorch) would bring its own torch,
+  OpenCV and NumPy, and installing the locked versions over it gives two
+  stacks in one image. OpenCV ≥ 5 is not optional here: the funding strip's
+  Unicode text depends on it (§17).
+- pdm, pinned, exists only in the build stage. The project itself is copied as
+  source and found via `PYTHONPATH`, so no build backend is needed either.
+
+Measured with this setup: the container and the host venv run identical torch,
+ultralytics and OpenCV versions and the same frame rate within run-to-run
+spread (`tools/benchmark.py`, GPU profile, development machine: 29.5 / 32.3
+FPS in the container against 30.7 / 32.5 on the host).
+
+**Weights in the image, at a fixed path** (`/opt/feature-viz/weights`,
+`WEIGHTS` points there). Downloaded during the build from the ultralytics
+assets release with `ADD --checksum`, so the build fails unless it gets the
+exact file the test suite used; downloaded at runtime they would land in the
+working directory (§11), an overlay layer that `--rm` discards. `--chmod=644`
+is needed: a URL source arrives as `0600 root`, unreadable for the runtime
+user — the first build failed on exactly that.
+
+**Nothing leaves the container.** `YOLO_OFFLINE=1` stops ultralytics' DNS
+probes and its usage events (it reports to Google Analytics whenever it
+believes it is online and its `sync` setting is on). `YOLO_CONFIG_DIR` points
+at a directory created for the unprivileged user, who has no home; ultralytics
+needs the directory to exist. Verified with `--network none`: GPU and CPU
+profile both become healthy in about 8 s, and the only file written is
+ultralytics' `settings.json`.
+
+**Three variants, one image.** Override files layer on `compose.yaml`:
+
+| Command | GPU | Source |
+|---|---|---|
+| `docker compose up` | yes | webcam |
+| `docker compose -f compose.yaml -f compose.sample.yaml up` | yes | sample clip |
+| `docker compose -f compose.yaml -f compose.cpu.yaml up` | no | sample clip |
+
+The CPU variant exists because the CPU profile does (§5): without a CUDA
+device the demonstrator selects it by itself, through the same code path. The
+overrides use Compose's `!reset` / `!override`; the variant file must come
+last. Profiles were considered and dropped: a service without a profile always
+starts, so three profiled variants leave plain `docker compose up` with
+nothing to run unless every machine carries a `.env` naming one. All three
+variants were run end to end, each delivering frames to the host.
+
+**Details that are deliberate.**
+
+- *CDI, not `--gpus all` / `runtime: nvidia`.* The legacy path can lose GPU
+  access when the host reloads systemd during routine package updates,
+  surfacing as `Failed to initialize NVML: Unknown Error` — a failure mode that
+  likes to appear in the middle of a demonstration. Needs Docker ≥ 28.2 and
+  nvidia-container-toolkit ≥ 1.18 with a generated CDI spec.
+- *Camera by stable path.* `CAMERA_DEVICE` in `.env` (template:
+  `.env.example`) names the `/dev/v4l/by-id/…` node; it is mapped to
+  `/dev/video0` inside, so `SOURCE=0` holds regardless. UVC cameras expose a
+  second, metadata-only node, and `videoN` numbers shift across reboots. The
+  host's `video` group is added by numeric GID (`VIDEO_GID`) — the container
+  cannot resolve the host's group names.
+- *Unprivileged user* (UID 10001); camera access comes from the group, not
+  from root.
+- *`ipc: host`*, otherwise PyTorch can stall on Docker's 64 MB default shared
+  memory.
+- *Health check on `/healthz`*, which reports frame freshness (§7): 503
+  until the first frame and whenever frames stop. 60 s start period for model
+  loading on the CPU profile. Docker only *reports* an unhealthy container; it
+  does not restart one.
+- *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
+  whose handler stops the loop; with the webcam too, since the shutdown fix
+  in §8 (verified: exit 0, no crash).
+- *Image tag follows the package version* (`feature-viz:0.1.0`);
+  `bump-my-version` updates `compose.yaml` along with `pyproject.toml`.
+- *Build context is an allow-list* (`.dockerignore`): without it, `.venv`
+  (6 GB) and local `*.pt` files would be sent to the daemon.
+- *Native Docker Engine, not Docker Desktop.* Docker Desktop on Linux runs its
+  containers in a VM; the development machine has both installed, and the
+  `default` context (the native engine) is the one to use. That Desktop
+  offers neither the GPU nor `/dev/video*` was not tested here.
+
+**Archive with `docker save`.** The tarball is a complete runnable system,
+independent of whether PyPI, Docker Hub or the ultralytics release still
+resolve in five years:
+
+```bash
+docker save feature-viz:0.1.0 | zstd -T0 -o feature-viz-0.1.0.tar.zst
+zstd -dc feature-viz-0.1.0.tar.zst | docker load
+```
+
+Image 6.6 GB, archive 2.9 GB with zstd, build about 5 min with a cold cache
+(development machine, 2026-09-28). Deleting the image and loading the archive
+gave a working, healthy container — but the load took 6 s, so the layers were
+most likely still in the local build cache; a load on a machine that never
+built the image is still open (§10).
 
 **Known limitation.** Docker does not abstract the GPU. A target machine still
-needs an NVIDIA card, a current driver and the container toolkit. Without a CDI
-device the same image runs on CPU via the §5 fallback, which is the intended
-behaviour.
+needs an NVIDIA card, a driver ≥ 580 and the container toolkit — or it runs the
+CPU variant.
 
 ---
 
@@ -462,6 +535,9 @@ behaviour.
 Everything below was reasoned about but not measured. Verify before relying on
 it.
 
+- **The container has only run on the development machine** (§9). On the
+  deployment machine: loading the saved archive on a Docker that never built
+  the image, the GPU and camera variants, the frame rate.
 - **No measurement from the deployment machine is recorded** (§14): all
   frame rates in this file come from the development machine.
 - **Everything in §14 holds for one machine and one clip.** Camera capture,
@@ -944,6 +1020,9 @@ behaviour stays consistent.
   `imshow` with the stream path, which is tested.
 - *`DUMP_STRUCTURE=1` through `main()`.* `dump_structure()` itself is tested;
   the environment switch in front of it is one line.
+- *The container.* Building the image takes minutes and 6.6 GB; it is
+  verified by hand along §9 — offline start, all three compose variants,
+  clean `docker stop`, reload from `docker save`.
 - *Running the tools.* They are import-checked, which catches a rename in the
   demonstrator; running them needs the checkpoint and writes files, and is
   left to their own use.

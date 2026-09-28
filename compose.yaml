@@ -1,0 +1,30 @@
+# feature-viz - the demonstration setup: GPU and webcam. Rationale:
+# DECISIONS.md §9. Variants layer on top of this file:
+#
+#   docker compose up                                        # GPU + webcam
+#   docker compose -f compose.yaml -f compose.sample.yaml up # GPU, sample clip
+#   docker compose -f compose.yaml -f compose.cpu.yaml up    # CPU, sample clip
+#
+# Machine-specific values (camera path, video group, port) come from .env;
+# see .env.example. Without .env the defaults below apply.
+name: feature-viz
+
+services:
+  feature-viz:
+    build: .
+    image: feature-viz:0.1.0
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      SOURCE: "0"
+    devices:
+      # CDI, not `--gpus`/`runtime: nvidia`: the legacy path can lose the GPU
+      # when the host reloads systemd during package updates (§9).
+      - nvidia.com/gpu=all
+      # Mapped to /dev/video0 inside, so SOURCE=0 holds whatever the host path.
+      - "${CAMERA_DEVICE:-/dev/video0}:/dev/video0"
+    group_add:
+      # Numeric: the container has no idea what "video" means on the host.
+      - "${VIDEO_GID:-44}"
+    # PyTorch can stall on Docker's default 64 MB of shared memory.
+    ipc: host
