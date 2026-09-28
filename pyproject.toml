@@ -1,7 +1,7 @@
 [project]
 name = "feature-viz"
 version = "0.1.0"
-description = "feature map visualisation (prototype)"
+description = "Live YOLO26 object detection shown next to the feature maps of selected layers - a demonstrator for talks"
 authors = [
     {name = "Florian Förster",email = "florian.foerster@mb.tu-chemnitz.de"},
 ]
@@ -92,7 +92,7 @@ directory = "reports/coverage"
 
 
 [tool.bumpversion]
-current_version = "0.1.1dev12"
+current_version = "0.1.0"
 parse = """(?x)
     (?P<major>0|[1-9]\\d*)\\.
     (?P<minor>0|[1-9]\\d*)\\.
