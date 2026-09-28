@@ -457,6 +457,8 @@ behaviour.
 Everything below was reasoned about but not measured. Verify before relying on
 it.
 
+- **No measurement from the deployment machine is recorded** (§14): all
+  frame rates in this file come from the development machine.
 - **Everything in §14 holds for one machine and one clip.** Camera capture,
   several simultaneous clients and browser-side decoding are still unmeasured.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
@@ -587,10 +589,18 @@ Measured 2026-09-21. This replaces the frame-rate and display-cost estimates
 that stood in §10; both were wrong about *where* the time goes, though the
 headline number held.
 
-**Machine.** Pop!_OS, **RTX 4070 Ti (12 GB)**, Ryzen 7 5700G (16 threads),
-driver 580.173.02, torch 2.14.0+cu130, ultralytics 8.4.157, OpenCV 5.0.0.
-Note this is **not** the RTX 4090 named as target hardware in `CLAUDE.md` —
-the numbers below are a lower bound for the demonstration machine.
+**Machine.** The **development machine**: Pop!_OS, RTX 4070 Ti (12 GB),
+Ryzen 7 5700G (16 threads), driver 580.173.02, torch 2.14.0+cu130,
+ultralytics 8.4.157, OpenCV 5.0.0. It is a private box, **not** the
+deployment machine (RTX 4090, AMD 16-core) that runs the demonstrations — see
+`CLAUDE.md`. Every figure in this section, §14.1 and §14.2 is therefore a
+lower bound for the demonstration.
+
+**Deployment-machine figures are missing.** Measurements were run on the RTX
+4090 in September 2026 but not recorded here. The only figure that survived
+is indirect: the stills generated there before the funding strip showed about
+50 FPS on the canvas (`docs/README.md`, commit 4e55fa1). Re-run
+`tools/benchmark.py` there and add the output as §14.3.
 
 **Method.** A 1200-frame 1280×720 clip built from the ultralytics `bus.jpg`
 asset with a slow pan and brightness drift, so that consecutive frames differ

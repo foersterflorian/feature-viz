@@ -57,7 +57,17 @@ pytest -m "not weights"                  # without the checkpoint, ~3 s
 activated venv, prefix with `pdm run`. `python -m feature_viz.demonstrator` is
 the equivalent long form.
 
-Target hardware: Pop!_OS, RTX 4090, AMD 16-core. CUDA is available.
+## Machines
+
+Two machines, both Pop!_OS with CUDA; `nvidia-smi` tells which one you are on.
+
+- **Deployment:** RTX 4090, AMD 16-core. Runs the demonstrations; the
+  frame rates that matter are the ones measured here.
+- **Development:** private box, RTX 4070 Ti (12 GB), Ryzen 7 5700G. Figures
+  from here are a lower bound for the deployment machine.
+
+Every recorded measurement names its machine (`tools/benchmark.py` prints the
+line). See `DECISIONS.md` §14.
 
 ## Rules
 
