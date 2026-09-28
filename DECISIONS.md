@@ -278,7 +278,9 @@ thing to trade away if headroom is ever needed.
 **Buffering.** The server holds only the most recently encoded frame. A slow
 client skips frames instead of throttling the inference loop. The skipping
 path has not been exercised: the one client measured kept up with every
-published frame (§14).
+published frame (§14). Since 2026-09-28 the buffer's skipping semantics are
+covered by `tests/test_buffer.py`; a real slow or remote client is still
+unmeasured.
 
 **`/healthz`** exists for the container health check. It should eventually
 report "last frame newer than N seconds" rather than "process alive" — a hung
@@ -327,6 +329,16 @@ easing in from zero (§4), so a still would have been correctly normalised.
 gives both one large foreground object and many small ones — which is what
 makes the depth gradient legible. Measured on the chosen still at `imgsz=640`:
 15 detections across four classes (train, truck, person, car).
+
+**Known defect (found 2026-09-28 while writing tests).** The fallback does
+not work as described. `_default_source()` looks for
+`src/feature_viz/assets/sample.mp4`, but the clip lives in the repository's
+`assets/`, so without `SOURCE` the demonstrator falls back to the webcam.
+`tests/test_config.py::test_default_source_is_the_sample_clip` records this
+as a strict `xfail`: it turns into a failure the moment the defect is fixed,
+so the marker cannot outlive the bug. Not fixed yet, because the fix is a
+decision — resolving the repository path works from a checkout but not from a
+wheel, while moving the clip into the package puts 3.4 MB into every install.
 
 **Webcam caveat.** Many UVC cameras default to YUYV rather than MJPG and drop
 to 5–10 FPS at 1080p regardless of model speed. This is the most common cause
@@ -396,6 +408,8 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
+- **Default source.** §8 promises the sample clip without `SOURCE`; the code
+  falls back to the webcam instead. Known defect, not yet fixed — see §8.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -633,8 +647,8 @@ if they visibly detect better on the material actually shown.
 
 ### 14.2 Cost of the funding strip (§17)
 
-Measured 2026-09-28 on the RTX 4070 Ti box, with a harness that mirrors
-`main()` including the JPEG encode, on `assets/sample.mp4` (300 frames, 60
+Measured 2026-09-28 on the RTX 4070 Ti box, with the harness that is now
+`tools/benchmark.py` (it mirrors `main()` including the JPEG encode), on `assets/sample.mp4` (300 frames, 60
 warm-up, 240 measured). A different clip from the one above, so compare within
 this table only. Two runs per row; run-to-run spread is about 1 FPS.
 
@@ -798,3 +812,74 @@ readable size is not one of them.
 
 **Open.** Minimum logo size under the funder's current design manual was not
 checked; see §10.
+
+---
+
+## 18. Tests: four tiers, the default suite needs no weights
+
+**Context.** Until 2026-09-28 there were no tests; every guarantee in this
+file rested on someone re-running the demonstrator and looking. For a project
+handed to people who did not write it, that is the weakest link.
+
+**Decision.** `pytest`, in four tiers, each test naming the section of this
+file it protects:
+
+| Tier | File | Needs | Protects |
+|---|---|---|---|
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py` | nothing | §4, §5, §7, §8, §11, §15, §17 |
+| Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
+| HTTP | `test_server.py` | nothing | §7, §16, §17 |
+| End-to-end | `test_e2e.py` | `yolo26n.pt` | §3, §8, §11, §17 |
+
+The first three tiers run in under 2 s (60 tests, measured 2026-09-28).
+End-to-end adds about 11 s. Tests marked `weights` or `gpu` are skipped,
+not failed, when the checkpoint or CUDA is absent.
+
+**The key enabler: the model without weights.** `YOLO("yolo26n.yaml")` builds
+the yolo26n module chain with random weights from the YAML that ships inside
+ultralytics — offline, in about a second, with the same 24 modules and the
+same block types at the target indices. Hooks, calibration, rendering and the
+index mapping only depend on the architecture, so they are tested without a
+checkpoint. The real checkpoint is still checked once, in the end-to-end tier.
+
+**Contracts, not implementation.** The tests pin what the sections above
+promise: the tap leaves the model output bit-identical (§2); the funding text
+in code matches the README verbatim (§17); only the listed logos are served;
+the page carries the AGPL source offer (§16); `compose` does not grow the
+canvas for the caption (§15). They do not pin pixel values of the render,
+which would break on every OpenCV release without anything being wrong.
+
+**Checked by mutation, not assumed.** Before committing, seven deliberate
+defects were introduced one at a time — a hook that alters the output, the
+strip dropped from the canvas, the source link removed, the logo allow-list
+removed, a buffer that keeps its oldest frame, a changed target index, and
+`compose` fitting the frame without subtracting the caption. Each one failed
+at least one test. An eighth — `caption_height` off by one — passed, and
+correctly so: `caption` sizes its strip with the same function, so the
+behaviour stays consistent.
+
+**Deliberately not tested.**
+
+- *Frame rate.* Machine-dependent; an assertion would be either too loose to
+  mean anything or flaky. `tools/benchmark.py` measures and prints instead.
+- *Visual quality.* That remains a look at the stills from
+  `tools/make_screenshot.py`.
+
+**Mechanics.** No new dependencies: HTTP tests use `urllib` and
+`http.client`, test images come from NumPy. Shared constants and helpers are in
+`tests/support.py`, fixtures in `tests/conftest.py`; `pythonpath = ["."]` in
+`pyproject.toml` makes `tests.support` importable under
+`--import-mode=importlib`. An autouse fixture clears the environment variables
+`build_config()` reads, so an exported `FORCE_CPU=1` in a developer's shell
+cannot change what a test sees. The HTTP tests share one server per module:
+`shutdown()` waits out the 0.5 s poll interval of `serve_forever`, which per
+test dominated the run time. mypy covers the tests as well.
+
+**Found while writing them.** The §8 default-source defect (recorded as a
+strict `xfail`). Also, with `PORT=0` the startup line prints port 0 instead of
+the port actually bound — cosmetic, since nobody runs it that way outside
+tests.
+
+**CI** (GitHub Actions) was discussed and deferred. The first three tiers
+would run on a free CPU runner, but the locked install pulls several GB of CUDA
+libraries there.

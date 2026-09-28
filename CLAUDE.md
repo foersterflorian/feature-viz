@@ -27,7 +27,9 @@ those as open tasks, not as facts.
 - **English only.** Code, comments, docstrings, commit messages, documentation.
 - **Full type annotations** on every function signature, class attribute, and
   any local whose type is not obvious. `mypy src/feature_viz/demonstrator.py
-  --ignore-missing-imports` must stay clean (ultralytics ships no stubs).
+  tests --ignore-missing-imports` must stay clean (ultralytics ships no stubs).
+- **Tests protect decisions.** Each test names the `DECISIONS.md` section it
+  guards (§18). Run `pytest` before every commit.
 - **One code path.** GPU and CPU differ by a parameter set in
   `build_config()`, never by branching logic. A second implementation is the
   failure mode this project exists to avoid.
@@ -45,7 +47,9 @@ DISPLAY_MODE=window feature-viz
 SOURCE=0 feature-viz                     # force webcam
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
 
-mypy src/feature_viz/demonstrator.py --ignore-missing-imports
+mypy src/feature_viz/demonstrator.py tests --ignore-missing-imports
+pytest                                   # all tiers; `weights`/`gpu` skip if unavailable
+pytest -m "not weights"                  # fast tiers only, < 2 s
 ```
 
 `feature-viz` is the console script declared in `pyproject.toml`. Outside an
