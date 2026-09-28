@@ -641,6 +641,13 @@ More on the project: <a href="{funding_url}">{funding_url}</a></p>
 _FUNDING_FILES: Final[frozenset[str]] = frozenset(name for name, _ in FUNDING_LOGOS)
 
 
+# /healthz reports unhealthy once the newest frame is older than this. Far
+# above any frame interval (the CPU profile still publishes every frame,
+# about 30 ms apart), far below the time it takes someone to notice a frozen
+# picture at a talk.
+HEALTH_MAX_AGE: Final[float] = 5.0
+
+
 class FrameBuffer:
     """Holds exactly the most recently encoded frame. Slow clients skip
     frames instead of slowing the demonstrator down.
@@ -653,12 +660,19 @@ class FrameBuffer:
         self._cond: threading.Condition = threading.Condition()
         self._jpeg: bytes | None = None
         self._seq: int = 0
+        self._published: float | None = None  # time.monotonic() of the last publish
 
     def publish(self, jpeg: bytes) -> None:
         with self._cond:
             self._jpeg = jpeg
             self._seq += 1
+            self._published = time.monotonic()
             self._cond.notify_all()
+
+    def age(self) -> float | None:
+        """Seconds since the last publish; None before the first frame."""
+        with self._cond:
+            return None if self._published is None else time.monotonic() - self._published
 
     def wait(self, last_seq: int, timeout: float = 5.0) -> tuple[bytes | None, int]:
         """Blocks until a new frame is available. Returns (None, seq) for
@@ -700,11 +714,7 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif self.path == "/healthz":
-            # For the container health check later on
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"ok")
+            self._health()
         elif self.path == "/stream.mjpg":
             self._stream()
         elif self.path.removeprefix("/funding/") in _FUNDING_FILES:
@@ -720,6 +730,25 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.wfile.write(data)
         else:
             self.send_error(404)
+
+    def _health(self) -> None:
+        """200 while frames keep coming, 503 otherwise. "Process alive" is not
+        enough: a hung camera leaves the process and the server running with
+        the last frame frozen on screen (DECISIONS.md §7)."""
+        age: float | None = self.buffer.age() if self.buffer is not None else None
+        healthy: bool = age is not None and age <= HEALTH_MAX_AGE
+        body: bytes = (
+            b"ok"
+            if healthy
+            else b"no frame yet"
+            if age is None
+            else f"stale: last frame {age:.1f} s ago".encode()
+        )
+        self.send_response(200 if healthy else 503)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _stream(self) -> None:
         if self.buffer is None:

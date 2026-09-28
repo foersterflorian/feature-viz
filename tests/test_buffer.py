@@ -44,3 +44,17 @@ def test_waiting_reader_is_woken_by_publish() -> None:
     buf.publish(b"x")
     reader.join(timeout=2.0)
     assert result == [(b"x", 1)]
+
+
+def test_age_counts_from_the_last_publish() -> None:
+    """Feeds /healthz (§7): None until the first frame, then small and
+    growing, reset by every publish."""
+    buf: demo.FrameBuffer = demo.FrameBuffer()
+    assert buf.age() is None
+    buf.publish(b"a")
+    time.sleep(0.05)
+    first: float | None = buf.age()
+    assert first is not None and 0.04 < first < 1.0
+    buf.publish(b"b")
+    second: float | None = buf.age()
+    assert second is not None and second < first

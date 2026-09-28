@@ -282,10 +282,15 @@ published frame (§14). Since 2026-09-28 the buffer's skipping semantics are
 covered by `tests/test_buffer.py`; a real slow or remote client is still
 unmeasured.
 
-**`/healthz`** exists for the container health check. It should eventually
-report "last frame newer than N seconds" rather than "process alive" — a hung
-camera leaves the process running with no frames coming out, and that is the
-case worth catching.
+**`/healthz`** reports whether frames keep coming, not whether the process is
+alive: 200 `ok` while the newest frame is at most `HEALTH_MAX_AGE` (5 s) old,
+503 with `no frame yet` or `stale: last frame … s ago` otherwise. A hung camera
+leaves the process and the server running with the last frame frozen on
+screen; that is the case the container health check (§9) exists to catch.
+5 s is far above any frame interval and far below the time an audience needs
+to notice a frozen picture. The 503 before the first frame is intended: while
+the model loads there is nothing to show, and the container's start period
+covers it.
 
 ---
 

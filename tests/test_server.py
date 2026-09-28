@@ -112,8 +112,40 @@ def test_everything_else_is_404(server: tuple[str, demo.FrameBuffer], path: str)
         conn.close()
 
 
-def test_healthz(server: tuple[str, demo.FrameBuffer]) -> None:
+@pytest.fixture
+def fresh_buffer(monkeypatch: pytest.MonkeyPatch) -> demo.FrameBuffer:
+    """An empty buffer behind the shared server, for tests that depend on
+    what has (not) been published."""
+    buffer: demo.FrameBuffer = demo.FrameBuffer()
+    monkeypatch.setattr(demo.StreamHandler, "buffer", buffer)
+    return buffer
+
+
+def test_healthz_is_503_before_the_first_frame(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    """§7: while the model loads there is nothing to show yet."""
+    assert get(server[0] + "/healthz")[0] == 503
+
+
+def test_healthz_is_ok_while_frames_keep_coming(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    fresh_buffer.publish(b"frame")
     assert get(server[0] + "/healthz")[::2] == (200, b"ok")
+
+
+def test_healthz_is_503_when_frames_stop(
+    server: tuple[str, demo.FrameBuffer],
+    fresh_buffer: demo.FrameBuffer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§7: a hung camera leaves process and server running with the last
+    frame frozen - exactly what "process alive" could not catch."""
+    fresh_buffer.publish(b"frame")
+    monkeypatch.setattr(demo, "HEALTH_MAX_AGE", 0.0)
+    time.sleep(0.01)
+    assert get(server[0] + "/healthz")[0] == 503
 
 
 def test_stream_without_frame_source_is_503(
