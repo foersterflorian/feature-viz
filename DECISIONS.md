@@ -452,9 +452,10 @@ working directory (§11), an overlay layer that `--rm` discards. `--chmod=644`
 is needed: a URL source arrives as `0600 root`, unreadable for the runtime
 user — the first build failed on exactly that.
 
-**Nothing leaves the container.** `YOLO_OFFLINE=1` stops ultralytics' DNS
-probes and its usage events (it reports to Google Analytics whenever it
-believes it is online and its `sync` setting is on). `YOLO_CONFIG_DIR` points
+**Nothing leaves the container.** ultralytics' telemetry is off through the
+package itself (§19), so the image needs no setting of its own for it; checked
+in a container *with* network: ultralytics considers itself offline, and does
+not with an explicit `YOLO_OFFLINE=0`. `YOLO_CONFIG_DIR` points
 at a directory created for the unprivileged user, who has no home; ultralytics
 needs the directory to exist. Verified with `--network none`: GPU and CPU
 profile both become healthy in about 8 s, and the only file written is
@@ -974,13 +975,14 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py` | nothing | §4, §5, §7, §8, §14, §15, §17 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 81 tests — runs in about 3.5 s, of
-which the no-camera subprocess test takes about 1.5 s; the five `weights`
+Everything except the `weights` tests — 88 tests — runs in about 8.5 s, of
+which the subprocess tests take about 6.5 s (no-camera start 1.5 s, the four
+telemetry checks 5 s — each needs a fresh interpreter importing torch); the five `weights`
 tests add about 15 s, 7 s of it the two camera stops and 5 s the loop check on
 a generated 10-frame clip (measured 2026-09-28, after the review below).
 Tests marked `weights`, `gpu` or `camera` are skipped, not failed, when the checkpoint, CUDA or a webcam is absent; the
@@ -1056,3 +1058,55 @@ starts with `PORT=0` and connects to whatever that line names.
 **CI** (GitHub Actions) was discussed and deferred. The first three tiers
 would run on a free CPU runner, but the locked install pulls several GB of CUDA
 libraries there.
+
+---
+
+## 19. ultralytics telemetry is off
+
+**Context.** Whenever ultralytics believes it is online — a DNS lookup of
+`one.one.one.one` or `dns.google` succeeds — and its `sync` setting is on
+(the default), it sends usage events to Google Analytics (the Measurement
+Protocol endpoint is in `ultralytics/utils/events.py`). The same online flag
+enables a PyPI version check and AutoUpdate, which can `pip install` missing
+packages at runtime.
+
+**Decision.** `feature_viz/__init__.py` sets `YOLO_OFFLINE=1`
+(`os.environ.setdefault`), for every entry point — console script, `python -m`,
+the tools, the container.
+
+**Why.** A demonstrator shown at talks at a public institution has no business
+reporting its use to a third party, and must not change its own installation
+at runtime; that also defeats the pinned environment of §9. `YOLO_OFFLINE`
+switches off exactly those four uses of the flag (events, update check,
+AutoUpdate, Sentry for the `yolo` CLI) and nothing else: downloading weights
+still works — the flag only changes the error message after a download has
+already failed (checked in `ultralytics/utils/downloads.py`, 8.4.157).
+
+**Why in the package, not in the environment.** ultralytics evaluates the flag
+once, when it is first imported. A variable the user has to remember, or one
+set only in the Dockerfile, covers some starts and silently misses others. The
+package `__init__` runs before any of its modules can import ultralytics.
+
+**The trap is import order.** Code that imports ultralytics *before*
+feature_viz gets the online behaviour back, silently. The tools therefore take
+`YOLO` from the demonstrator rather than importing ultralytics at the top —
+isort would otherwise sort the third-party import above the first-party one.
+`tests/test_telemetry.py` imports each entry point in a fresh interpreter that
+fakes a working DNS, so the check does not pass merely because the test
+machine is offline; its control case shows the fake does make ultralytics go
+online without the switch.
+
+**Rejected alternatives.**
+
+- *`yolo settings sync=False`.* Persists in the user's
+  `~/.config/Ultralytics/settings.json`, so it changes ultralytics for every
+  other project on the machine, and a fresh machine or container starts with
+  `sync` on again.
+- *Setting `SETTINGS["sync"]` at runtime.* ultralytics writes settings through
+  to the same file — the same side effect.
+- *Disabling the events object after import.* Reaches into ultralytics
+  internals at runtime; the rule is to leave the dependency stock (§2).
+
+**Opting back in.** An explicit `YOLO_OFFLINE=0` in the environment wins,
+since the package only sets a default.
+

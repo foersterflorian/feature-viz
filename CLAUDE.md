@@ -53,7 +53,7 @@ docker compose -f compose.yaml -f compose.cpu.yaml up   # container, CPU, sample
 mypy src/feature_viz/demonstrator.py tests --ignore-missing-imports
 ruff check src tests tools
 pytest                                   # all tiers; `weights`/`gpu`/`camera` skip if unavailable
-pytest -m "not weights"                  # without the checkpoint, ~3 s
+pytest -m "not weights"                  # without the checkpoint, ~9 s
 ```
 
 `feature-viz` is the console script declared in `pyproject.toml`. Outside an

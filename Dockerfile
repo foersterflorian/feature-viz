@@ -67,13 +67,11 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONPATH=/opt/feature-viz/src \
     PYTHONUNBUFFERED=1 \
     WEIGHTS=/opt/feature-viz/weights/yolo26n.pt \
-    YOLO_CONFIG_DIR=/tmp/ultralytics \
-    YOLO_OFFLINE=1
+    YOLO_CONFIG_DIR=/tmp/ultralytics
 
 # YOLO_CONFIG_DIR: the user has no home, and ultralytics would warn on every
-# start that it cannot write settings.json. YOLO_OFFLINE: no DNS probes and no
-# usage events leave the container; a demonstrator must not depend on, or
-# report to, the network at a talk.
+# start that it cannot write settings.json. Telemetry is off without anything
+# set here: the feature_viz package switches it off itself (DECISIONS.md §19).
 
 EXPOSE 8080
 

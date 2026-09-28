@@ -28,9 +28,11 @@ from typing import Iterator, cast
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
 
+# YOLO through the demonstrator, not `from ultralytics import YOLO`: importing
+# feature_viz first switches ultralytics' telemetry off (DECISIONS.md §19).
 from feature_viz.demonstrator import (
+    YOLO,
     BGRImage,
     Config,
     FeatureTap,

@@ -33,9 +33,10 @@ from typing import cast
 import cv2
 import numpy as np
 import torch
-import ultralytics
-from ultralytics import YOLO
 
+# YOLO comes through the demonstrator, never from `import ultralytics` up
+# here: importing feature_viz first is what switches ultralytics' telemetry
+# off (DECISIONS.md §19), and isort would put a direct import above it.
 from feature_viz import demonstrator as demo
 
 ROOT: Path = Path(__file__).resolve().parent.parent
@@ -43,6 +44,8 @@ SAMPLE: Path = ROOT / "assets" / "sample.mp4"
 
 
 def machine() -> str:
+    import ultralytics  # after feature_viz; see the import note above
+
     gpu: str = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no CUDA"
     return (
         f"{gpu} | {platform.processor() or platform.machine()} ({os.cpu_count()} threads) | "
@@ -54,7 +57,7 @@ def machine() -> str:
 def run(cfg: demo.Config, warmup: int) -> tuple[list[float], tuple[int, int]]:
     """One pass over the source. Returns per-frame loop times after warm-up
     and the canvas size."""
-    model: YOLO = YOLO(cfg.weights)
+    model: demo.YOLO = demo.YOLO(cfg.weights)
     model.to(cfg.device)
     tap: demo.FeatureTap = demo.FeatureTap(model, cfg.targets)
     renderer: demo.GridRenderer = demo.GridRenderer(cfg, tap)
