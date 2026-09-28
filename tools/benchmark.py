@@ -109,7 +109,7 @@ def main() -> int:
         return 1
     if args.no_funding_strip:
         # Comparison only: a zero-height strip leaves compose() untouched.
-        demo.funding_strip = lambda width: np.zeros((0, width, 3), dtype=np.uint8)
+        demo.funding_strip = lambda width: np.zeros((0, width, 3), dtype=np.uint8)  # type: ignore[assignment]
 
     print(f"[info] {machine()}")
     print(f"[info] {cfg.weights} | {cfg.device} | {cfg.imgsz}px | layers {cfg.targets}")
