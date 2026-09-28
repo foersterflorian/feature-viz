@@ -2,7 +2,7 @@
 
 **Project:** YOLO feature-map visualisation demonstrator (TUC-KMI)
 **Status:** porting from the YOLOv7-based original to Ultralytics YOLO26
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-28
 
 This file records *why* the code looks the way it does. The code says what it
 does; this says what was considered and rejected, so that changing something
@@ -391,6 +391,11 @@ it.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
+- **Funding logo guidelines.** The BMFTR logo is shown at 160 px height in the
+  canvas strip and 110 px on the web page, uncropped and unrecoloured (§17).
+  Whether that meets the funder's minimum-size rule for screen use was not
+  checked against the current BMFTR design manual, and on a 1920-wide
+  projector the canvas — strip included — is downscaled by about half.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -626,6 +631,24 @@ necessarily do better. Detection *quality* was not assessed at all — this
 section is about cost, and the larger models are worth their millisecond only
 if they visibly detect better on the material actually shown.
 
+### 14.2 Cost of the funding strip (§17)
+
+Measured 2026-09-28 on the RTX 4070 Ti box, with a harness that mirrors
+`main()` including the JPEG encode, on `assets/sample.mp4` (300 frames, 60
+warm-up, 240 measured). A different clip from the one above, so compare within
+this table only. Two runs per row; run-to-run spread is about 1 FPS.
+
+| Profile | Canvas | FPS without strip | FPS with 160 px strip |
+|---|---|---|---|
+| GPU | 3790×1212 → ×1372 | 33.7 / 32.3 | 30.9 / 31.2 |
+| GPU, 220 px strip (rejected) | 3790×1432 | — | 30.1 / 29.0 |
+| CPU (`FORCE_CPU=1`) | 3520×781 → ×941 | 36.5 / 36.1 | 35.1 / 35.9 |
+
+About 1–3 FPS on the GPU profile, 0.2–1.4 FPS on the CPU profile. The strip
+itself is cached; what is paid per frame is the `np.vstack` copy and 13% more
+pixels through the JPEG encoder. The 220 px variant pushed the GPU mean below
+30 FPS on this card and was dropped.
+
 ---
 
 ## 15. Labels: a caption strip, not text on the tiles
@@ -704,9 +727,74 @@ closed reuse by an industry partner without a separate agreement.
 
 **Open, not decided here.** Whether copyright sits with the author or with TU
 Chemnitz as the employer, and whether any funder imposes licence conditions,
-was not assessed. The notice currently names the author as given in
+was not assessed. The funder does impose an *acknowledgement* (§17); the two
+logos that carries are third-party marks and are excluded from the AGPL in
+`README.md`. The notice currently names the author as given in
 `pyproject.toml`. Both questions belong to the institution, not to this file.
 
 **Weights** are not redistributed: `*.pt` is git-ignored and downloaded at
 runtime (§11), so Ultralytics' model files carry their own terms and are not
 conveyed by this repository.
+
+---
+
+## 17. Funding notice: on the canvas and on the page
+
+**Context.** The demonstrator comes out of the K-M-I project, funded by the
+BMFTR within the ReKodA initiative. The funding terms ask for an
+acknowledgement with the funder's logo wherever project results are shown. The
+wording and both logos are taken verbatim from the project's sibling repository
+`pyforcesim` (README, `img/`); the image files are byte-identical copies.
+
+**Decision.** The notice appears in three places: the `README.md`, the footer
+of the served web page (text, project link, logos on a white panel), and a
+white strip along the bottom of the video canvas, built by `funding_strip()`
+and appended in `compose()`.
+
+**Why the canvas, not only the page.** At a talk the audience sees whatever is
+projected, and that is often not the page: `DISPLAY_MODE=window` has no page
+at all, `/stream.mjpg` can be opened full-screen on its own, and the stills in
+`docs/` are cut from the canvas. Only the canvas is guaranteed to be on
+screen. The page carries it as well because the page is where a reader looks
+for text and a link.
+
+**Why it may grow the canvas, unlike the caption strips.** §15 fits the
+caption strip *into* the existing height so that it costs no area. Doing the
+same here would shrink the detection frame and every feature-map panel by 12%
+to make room for a logo — trading the content for its acknowledgement. The
+strip instead adds 160 rows and costs 1–3 FPS (§14.2). If headroom is ever
+short, the levers in §14 come first; shrinking the strip below the logo's
+readable size is not one of them.
+
+**Details that are deliberate.**
+
+- *White ground.* The BMFTR logo must sit on white or a very light colour; the
+  canvas and the page are otherwise dark.
+- *Files unmodified, only scaled.* The logo's protected margin is part of the
+  mark and is not cropped, even though it makes the logo look smaller than
+  its footprint.
+- *Package data, not repository files.* The logos live in
+  `src/feature_viz/funding/` and are read via `importlib.resources`, so a
+  wheel or container install finds them; the build was checked to include
+  them. The page serves them from `/funding/<name>`, restricted to the names in
+  `FUNDING_LOGOS`.
+- *Verbatim text, one wording everywhere.* `FUNDING_TEXT` matches the README
+  character for character, typographic quotes and dash included. That relies
+  on OpenCV ≥ 5, whose `putText` renders Unicode (checked with 5.0.0); the
+  Hershey fonts of OpenCV 4 would print `?` instead. `pyproject.toml` already
+  requires 5.x.
+- *Cached per width.* `funding_strip` is built once; the canvas width is fixed
+  for a given source. `tools/make_screenshot.py` rebuilds it at the crop width
+  so that `demo-crop.png` re-wraps the text instead of cutting it.
+
+**Rejected alternatives.**
+
+- *Page only.* Free in frame rate, but absent from window mode, the bare
+  stream and every still — i.e. from most of what an audience actually sees.
+- *Logo overlaid on the detection frame.* Costs no rows, but covers image
+  content and, like the text overlays of §15, is not legible against it.
+- *A splash screen or periodic interstitial.* Satisfies the letter, but
+  interrupts the live demonstration it is meant to accompany.
+
+**Open.** Minimum logo size under the funder's current design manual was not
+checked; see §10.

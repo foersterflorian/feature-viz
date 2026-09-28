@@ -59,6 +59,9 @@ Dependencies:
 
 from __future__ import annotations
 
+import functools
+import html
+import mimetypes
 import os
 import signal
 import sys
@@ -67,6 +70,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Protocol, TypeAlias, cast
 
@@ -441,8 +445,105 @@ class GridRenderer:
         return np.vstack(stacked[:-1])
 
 
+# ==========================================================================
+# Funding notice
+# ==========================================================================
+# The demonstrator comes out of the K-M-I project, and its funding terms ask
+# for this acknowledgement wherever results are shown. It is therefore part
+# of the canvas itself, not only of the web page: a talk may run in window
+# mode or show /stream.mjpg full-screen, and the stills in docs/ are cut from
+# the canvas. See DECISIONS.md §17.
+#
+# Verbatim from the project's funding notice, typographic quotes included:
+# the OpenCV >= 5 that pyproject.toml requires renders them in putText.
+FUNDING_TEXT: Final[str] = (
+    "The K-M-I research and development project is funded as part of the "
+    "“Future of Work: Regional Competence Centers for Labor Research – "
+    "Artificial Intelligence” funding initiative within the “Innovations for "
+    "Tomorrow's Production, Services, and Work” program of the German Federal "
+    "Ministry of Research, Technology and Space (BMFTR) and is supervised by "
+    "the Project Management Agency Karlsruhe (PTKA)."
+)
+FUNDING_URL: Final[str] = "https://kmi-netzwerk.org/kmi-projekt/"
+
+# (file in feature_viz/funding/, alt text). The files are the funder's
+# originals, unmodified: logo guidelines forbid cropping the protected margin
+# or recolouring, so they are only ever scaled.
+FUNDING_LOGOS: Final[tuple[tuple[str, str], ...]] = (
+    (
+        "BMFTR_de_Web_RGB_gef_durch.jpg",
+        "Funded by the German Federal Ministry of Research, Technology and Space",
+    ),
+    (
+        "Logo_Kompetenzzentren_Arbeitsforschung.png",
+        "Regional Competence Centres of Work Research (ReKodA)",
+    ),
+)
+
+FUNDING_STRIP_H: Final[int] = 160
+FUNDING_TEXT_SCALE: Final[float] = 0.75
+
+
+def funding_asset(name: str) -> bytes:
+    """Raw bytes of a logo, read from the installed package rather than the
+    repository, so that a wheel or container install finds them too."""
+    return (resources.files("feature_viz") / "funding" / name).read_bytes()
+
+
+def _wrap(text: str, scale: float, max_w: int) -> list[str]:
+    lines: list[str] = []
+    line: str = ""
+    for word in text.split():
+        trial: str = f"{line} {word}".strip()
+        if line and cv2.getTextSize(trial, FONT, scale, 1)[0][0] > max_w:
+            lines.append(line)
+            line = word
+        else:
+            line = trial
+    return lines + [line]
+
+
+@functools.cache
+def funding_strip(width: int) -> BGRImage:
+    """White strip with both logos and the funding text, `width` pixels wide.
+
+    Built once per width and cached: the canvas width is fixed for a given
+    source, so every frame after the first reuses the same array. White,
+    because the BMFTR logo must sit on a white or very light ground.
+    """
+    logos: list[BGRImage] = []
+    for name, _ in FUNDING_LOGOS:
+        raw: NDArray[np.uint8] = np.frombuffer(funding_asset(name), dtype=np.uint8)
+        img: BGRImage = cast(BGRImage, cv2.imdecode(raw, cv2.IMREAD_COLOR))
+        s: float = FUNDING_STRIP_H / img.shape[0]
+        logos.append(cast(BGRImage, cv2.resize(img, (int(img.shape[1] * s), FUNDING_STRIP_H),
+                                               interpolation=cv2.INTER_AREA)))
+
+    pad: int = 16
+    x0: int = sum(logo.shape[1] for logo in logos) + pad
+    lines: list[str] = _wrap(FUNDING_TEXT, FUNDING_TEXT_SCALE, width - x0 - pad)
+    line_h: int = int(round(26 * FUNDING_TEXT_SCALE)) + 8
+    h: int = max(FUNDING_STRIP_H, len(lines) * line_h + 2 * pad)
+
+    strip: BGRImage = np.full((h, width, 3), 255, dtype=np.uint8)
+    x: int = 0
+    for logo in logos:
+        # A canvas narrower than the logos is not a real case (the detection
+        # frame alone is wider), but it must not crash the demonstrator.
+        w: int = min(logo.shape[1], width - x)
+        strip[:FUNDING_STRIP_H, x : x + w] = logo[:, :w]
+        x += w
+    y: int = (h - len(lines) * line_h) // 2
+    for line in lines:
+        y += line_h
+        cv2.putText(strip, line, (x0, y - 8), FONT, FUNDING_TEXT_SCALE, (40, 40, 40), 1,
+                    cv2.LINE_AA)
+    return strip
+
+
 def compose(frame: BGRImage, grid: BGRImage, fps: float, info: str) -> BGRImage:
-    """Detection image and feature-map grid side by side."""
+    """Detection image and feature-map grid side by side, funding strip
+    underneath."""
 
     def fit(img: BGRImage, height: int) -> BGRImage:
         s: float = height / img.shape[0]
@@ -457,10 +558,11 @@ def compose(frame: BGRImage, grid: BGRImage, fps: float, info: str) -> BGRImage:
     # text at a fixed pixel size, independent of the camera's resolution.
     bar: int = caption_height(lines)
     target_h: int = max(frame.shape[0] + bar, grid.shape[0])
-    return cast(
+    body: BGRImage = cast(
         BGRImage,
         np.hstack([caption(fit(frame, target_h - bar), lines), fit(grid, target_h)]),
     )
+    return cast(BGRImage, np.vstack([body, funding_strip(body.shape[1])]))
 
 
 # ==========================================================================
@@ -483,6 +585,12 @@ PAGE: Final[str] = """<!doctype html>
   img {{ max-width:100%; height:auto; display:block; }}
   footer {{ font-size:12px; color:#888; margin-top:12px; }}
   footer a {{ color:#9bf; }}
+  .funding {{ font-size:12px; color:#aaa; margin-top:16px; max-width:900px; }}
+  .funding a {{ color:#9bf; }}
+  /* The BMFTR logo must sit on a white ground; the page is dark. */
+  .logos {{ display:inline-flex; gap:16px; background:#fff; padding:8px;
+           margin-top:8px; }}
+  .logos img {{ height:110px; width:auto; }}
 </style></head>
 <body><h1>YOLO26 &mdash; detection and feature maps &nbsp;|&nbsp; {info}</h1>
 <img src="/stream.mjpg" alt="Stream">
@@ -491,8 +599,14 @@ licensed under the
 <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a> or later.
 Source: <a href="{source}">{source}</a>.
 Uses Ultralytics YOLO, also AGPL-3.0.</footer>
+<section class="funding"><p>{funding_text}
+More on the project: <a href="{funding_url}">{funding_url}</a></p>
+<div class="logos">{funding_logos}</div></section>
 </body></html>
 """
+
+
+_FUNDING_FILES: Final[frozenset[str]] = frozenset(name for name, _ in FUNDING_LOGOS)
 
 
 class FrameBuffer:
@@ -537,7 +651,16 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
-            body: bytes = PAGE.format(info=self.info, source=SOURCE_URL).encode("utf-8")
+            body: bytes = PAGE.format(
+                info=self.info,
+                source=SOURCE_URL,
+                funding_text=html.escape(FUNDING_TEXT),
+                funding_url=FUNDING_URL,
+                funding_logos="".join(
+                    f'<img src="/funding/{name}" alt="{html.escape(alt)}">'
+                    for name, alt in FUNDING_LOGOS
+                ),
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -551,6 +674,17 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"ok")
         elif self.path == "/stream.mjpg":
             self._stream()
+        elif self.path.removeprefix("/funding/") in _FUNDING_FILES:
+            # Checked against a fixed list, so no path reaches the file
+            # system that the code did not name itself.
+            name: str = self.path.removeprefix("/funding/")
+            data: bytes = funding_asset(name)
+            self.send_response(200)
+            self.send_header("Content-Type", mimetypes.guess_type(name)[0] or "image/*")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
         else:
             self.send_error(404)
 

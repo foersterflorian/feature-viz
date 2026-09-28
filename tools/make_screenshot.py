@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Iterator, cast
 
 import cv2
+import numpy as np
 
 from feature_viz.demonstrator import (
     BGRImage,
@@ -35,6 +36,7 @@ from feature_viz.demonstrator import (
     GridRenderer,
     build_config,
     compose,
+    funding_strip,
 )
 from ultralytics import YOLO
 
@@ -100,7 +102,11 @@ def main() -> int:
             # the black gap between columns, which is invisible.
             frame_w: int = canvas.shape[1] - grid.shape[1]
             cut: int = frame_w + grid.shape[1] // cfg.panel_cols
-            cv2.imwrite(str(DOCS / "demo-crop.png"), canvas[:, :cut])
+            # The funding strip is cut off and rebuilt at the crop width, so
+            # the notice is re-wrapped instead of losing the end of each line.
+            body_h: int = canvas.shape[0] - funding_strip(canvas.shape[1]).shape[0]
+            crop: BGRImage = np.vstack([canvas[:body_h, :cut], funding_strip(cut)])
+            cv2.imwrite(str(DOCS / "demo-crop.png"), crop)
 
             print(
                 f"[info] frame {n}: canvas {canvas.shape[1]}x{canvas.shape[0]}, "
