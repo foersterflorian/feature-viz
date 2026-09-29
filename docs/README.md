@@ -21,21 +21,19 @@ and logos.
 
 Both are lossless PNG, because the feature-map tiles are high-frequency and
 JPEG ringing lands exactly on the structure the pictures exist to show. They
-are correspondingly large (7.3 MB and 4.9 MB).
+are correspondingly large (7.6 MB and 5.0 MB).
 
 ## What the pictures show
 
-Recorded on the development machine (RTX 4070 Ti) with the GPU profile:
-`yolo26n`, 640 px input, six target layers, about 33 FPS, 15 detections across
-four classes. (The previous set, before the funding strip, was recorded on the
-deployment machine, RTX 4090, at about 50 FPS; regenerate there if the faster
-figure should appear on the slide.) The exact
-figure printed on the canvas shifts by a frame or two between runs, so it will
-not match this line character for character after a rebuild. It is an honest
-number: `tools/make_screenshot.py` keeps the JPEG encode in the loop even
-though it writes PNG, because that encode is 10.4 ms of the frame budget
-(`DECISIONS.md` §14). The measurements in §14 were taken on the same
-development machine; see `CLAUDE.md` for the two machines.
+Recorded on the deployment machine (RTX 4090) with the GPU profile:
+`yolo26n`, 640 px input, six target layers, about 47 FPS, 15 detections across
+four classes (2026-09-29). The exact figure printed on the canvas shifts by a
+frame or two between runs, so it will not match this line character for
+character after a rebuild. It is an honest number: `tools/make_screenshot.py`
+keeps the JPEG encode in the loop even though it writes PNG, because that
+encode is 10.4 ms of the frame budget on the development machine
+(`DECISIONS.md` §14). The deployment-machine benchmark in §14.3 gives the same
+rate; see `CLAUDE.md` for the two machines.
 
 The subject is a CC0 photograph; `assets/SOURCES.md` records its origin,
 licence and checksums.
