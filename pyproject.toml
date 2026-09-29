@@ -139,6 +139,17 @@ filename = "compose.yaml"
 search = "image: feature-viz:{current_version}"
 replace = "image: feature-viz:{new_version}"
 
+# The archive commands, so that they name the image compose.yaml builds.
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "feature-viz:{current_version}"
+replace = "feature-viz:{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "feature-viz-{current_version}.tar.zst"
+replace = "feature-viz-{new_version}.tar.zst"
+
 
 [tool.pdm]
 distribution = true
