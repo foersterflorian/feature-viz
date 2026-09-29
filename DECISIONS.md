@@ -404,39 +404,72 @@ six of six stops (three SIGINT, three SIGTERM) exit 0 within a second, against
 four of four crashes before. `tests/test_e2e.py` keeps it that way, marked
 `camera` and skipped where no webcam can be opened.
 
-**Webcam: the talk camera runs at 640×480 (measured 2026-09-29).** Many UVC
-cameras offer only low frame rates in YUYV above VGA, and
-`model.predict(source=0)` opens the stream internally with a bare
-`cv2.VideoCapture` — ultralytics sets no format, size or frame rate
-(`LoadStreams`), so camera parameters are not reachable from here. Measured on
-the deployment machine with the talk camera, a UGREEN USB webcam on USB 2.0
-(`/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0`); modes
-from `v4l2-ctl --list-formats-ext`, rates by reading 120 frames through OpenCV
-(60 for the slow YUYV rows):
+Since 2026-09-29 a camera is read by `results()` itself (below) and released
+in that generator's `finally`, which `main()` reaches by closing it.
+`close_source()` stays for stream URLs, which still go through
+`LoadStreams`. The two stop tests passed after the change.
+
+**Webcam: read by `results()`, as MJPG 1280×720 (2026-09-29).** A camera
+index is no longer handed to ultralytics. `open_camera()` opens it with
+`cv2.VideoCapture`, requests MJPG, 1280×720 and 30 FPS (fixed in `Config`),
+and `results()` passes each frame to `predict()` as an array. The mode
+actually in effect is printed at startup (`[info] camera: MJPG 1280x720 @
+30`); a camera that lacks it delivers what it has rather than refusing to
+start. Files and stream URLs still go through ultralytics' own source
+handling.
+
+*Why not leave it to ultralytics.* ultralytics opens a camera with a bare
+`cv2.VideoCapture` and sets no format, size or rate (`LoadStreams`); OpenCV
+then sets 640×480, which on UVC cameras means YUYV. A mode set beforehand
+with `v4l2-ctl` does not survive: OpenCV resets it on open (checked). So the
+mode can only be chosen by opening the camera here.
+
+*Measurements* — deployment machine, the talk camera: a UGREEN USB webcam on
+USB 2.0 (`/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0`).
+Modes from `v4l2-ctl --list-formats-ext`, rates by reading 120 frames through
+OpenCV (60 for the slow YUYV rows):
 
 | Mode | Offered | Measured |
 |---|---|---|
-| Default as opened by ultralytics: YUYV 640×480 | 30 FPS | 28.7 FPS |
+| YUYV 640×480 (what ultralytics got) | 30 FPS | 28.7 FPS |
 | YUYV 1280×720 | 10 FPS | 8.8 FPS |
 | YUYV 1920×1080 | 5 FPS | 4.4 FPS |
 | MJPG 1280×720 | 30 FPS | 28.6 FPS |
 | MJPG 1920×1080 | 30 FPS | 28.7 FPS |
 
-The default lands on YUYV 640×480, where USB 2.0 still carries 30 FPS, so the
-feared YUYV slowdown does not occur with this camera. The demonstrator with
-the GPU profile ran at **28.3 FPS** from it (600 frames; 28.0 FPS counted at a
-browser client over 30 s): the camera, not the pipeline, sets the rate, as
-§14.3 predicts at 47 FPS of headroom. Detection is unaffected by the low
-resolution — the model sees 640 px either way.
+*Why 720p.* Not mainly sharpness. The canvas is about 3300–3800 px wide, so
+a 1920-wide projector halves it, and the camera area on screen is only about
+900–1040 px wide. At 640×480 that is a 1.4-fold upscale (an earlier note here
+said 2.5-fold, which is the factor on the full canvas, not on the projector);
+720p is downscaled instead, somewhat sharper at edges and fine detail,
+not dramatically. The larger gain is the field of view: 640×480 is a 4:3 crop
+of the sensor, while 720p and 1080p show the same height and considerably more
+to the left and right — more room for people and objects in front of the
+camera. 1080p looks the same as 720p at projector size and was not taken.
 
-The cost is sharpness. The 640×480 picture is scaled up about 2.5-fold to the
-canvas height, which shows on a projector. MJPG gives 720p or 1080p at the
-full 30 FPS, but only by capturing with an explicit `cv2.VideoCapture`
-(fourcc MJPG, size, FPS) and passing frames to `predict` as arrays. Whether
-that is worth it is open.
+*Result*, GPU profile, same machine and camera: **28.7 FPS** counted at a
+browser client over 30 s (28.0–28.3 before), the on-canvas figure 27.7–28.9,
+canvas 3790×1372 (3278×1372 before — the size of the sample clip's canvas,
+which runs at 47 FPS here, §14.3). Frame intervals over 600 frames: median
+35.3 ms, p5–p95 27.8–41.0 ms, none under 20 ms. Before, through
+ultralytics' polling, they were bimodal around 16 and 50 ms (§20). Latency
+was not measured.
 
-The FPS figure drawn on the canvas read about 38 during this run, not 28 —
-fixed the same day, see §20.
+*The driver's buffer count is left alone.* The plan was
+`CAP_PROP_BUFFERSIZE = 1` to keep latency low. Measured, it lost every other
+frame: 16.7 FPS, `read()` waiting 37.8 ms per frame, because with a single
+buffer the driver cannot capture while the loop works. With the default
+queue: 28.7 FPS, `read()` 13.5 ms, the rest of the loop about 22 ms
+(`predict` 4.9, render 4.5, plot and compose 4.8, JPEG encode 7.7). The loop
+is faster than the camera, so the default queue does not fill up.
+
+*Tests.* `test_camera_opens_in_the_configured_mode` (marked `camera`) checks
+the talk camera opens as MJPG 1280×720; without the FOURCC request it opens
+as YUYV 1280×720 at 10 FPS and the test fails. A camera without that mode
+would fail it too — then judge by the `[info] camera:` line.
+`test_camera_ends_the_run_and_releases_the_device` checks, with a fake
+capture, that a camera that stops delivering ends the run and that the
+device is released, also when `main()` closes the generator early.
 
 ---
 
@@ -569,7 +602,9 @@ it.
 - **Everything in §14 holds for one clip per machine.** Camera capture was
   measured once, for the talk camera on the deployment machine (§8); several
   simultaneous clients and browser-side decoding are still unmeasured.
-- **Whether the talk camera's 640×480 is sharp enough on a projector** (§8).
+- **The container with the camera read by `results()`** (§8, §9). The own
+  capture uses the same OpenCV V4L2 backend as ultralytics did, but the
+  camera variant of the container has not been run since the change.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
@@ -1047,8 +1082,8 @@ file it protects:
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 90 tests — runs in about 8.5 s (6.3 s
-on the deployment machine, 2026-09-29), of
+Everything except the `weights` tests — 91 tests — runs in about 8.5 s (7.7 s
+on the deployment machine with the camera test, 2026-09-29), of
 which the subprocess tests take about 6.5 s (no-camera start 1.5 s, the four
 telemetry checks 5 s — each needs a fresh interpreter importing torch); the five `weights`
 tests add about 15 s, 7 s of it the two camera stops and 5 s the loop check on
@@ -1193,7 +1228,9 @@ little and slept a full period) — 268 of 600 intervals were under 20 ms. The
 mean of the rates over such a mix is far above the rate itself (Jensen's
 inequality: `mean(1/dt) ≥ 1/mean(dt)`). With a video file the loop is
 compute-bound, the intervals are even and the two agree, which is why the
-figures in §14 and the stills were never affected.
+figures in §14 and the stills were never affected. Since the camera is read
+by `results()` (§8) its intervals are even too; stream URLs still go through
+ultralytics' polling.
 
 **Decision.** `FrameRate` smooths the interval with the same EMA weight and
 inverts once. It is seeded with the first interval instead of easing in from
