@@ -404,12 +404,39 @@ six of six stops (three SIGINT, three SIGTERM) exit 0 within a second, against
 four of four crashes before. `tests/test_e2e.py` keeps it that way, marked
 `camera` and skipped where no webcam can be opened.
 
-**Webcam caveat.** Many UVC cameras default to YUYV rather than MJPG and drop
-to 5–10 FPS at 1080p regardless of model speed. This is the most common cause
-of "the demonstrator is not smooth". Note that `model.predict(source=0)` opens
-the stream internally, so camera parameters are not reachable from here. If
-this becomes a problem, capture with an explicit `cv2.VideoCapture` (fourcc
-MJPG, explicit FPS) and pass frames to `predict` as arrays.
+**Webcam: the talk camera runs at 640×480 (measured 2026-09-29).** Many UVC
+cameras offer only low frame rates in YUYV above VGA, and
+`model.predict(source=0)` opens the stream internally with a bare
+`cv2.VideoCapture` — ultralytics sets no format, size or frame rate
+(`LoadStreams`), so camera parameters are not reachable from here. Measured on
+the deployment machine with the talk camera, a UGREEN USB webcam on USB 2.0
+(`/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0`); modes
+from `v4l2-ctl --list-formats-ext`, rates by reading 120 frames through OpenCV
+(60 for the slow YUYV rows):
+
+| Mode | Offered | Measured |
+|---|---|---|
+| Default as opened by ultralytics: YUYV 640×480 | 30 FPS | 28.7 FPS |
+| YUYV 1280×720 | 10 FPS | 8.8 FPS |
+| YUYV 1920×1080 | 5 FPS | 4.4 FPS |
+| MJPG 1280×720 | 30 FPS | 28.6 FPS |
+| MJPG 1920×1080 | 30 FPS | 28.7 FPS |
+
+The default lands on YUYV 640×480, where USB 2.0 still carries 30 FPS, so the
+feared YUYV slowdown does not occur with this camera. The demonstrator with
+the GPU profile ran at **28.3 FPS** from it (600 frames; 28.0 FPS counted at a
+browser client over 30 s): the camera, not the pipeline, sets the rate, as
+§14.3 predicts at 47 FPS of headroom. Detection is unaffected by the low
+resolution — the model sees 640 px either way.
+
+The cost is sharpness. The 640×480 picture is scaled up about 2.5-fold to the
+canvas height, which shows on a projector. MJPG gives 720p or 1080p at the
+full 30 FPS, but only by capturing with an explicit `cv2.VideoCapture`
+(fourcc MJPG, size, FPS) and passing frames to `predict` as arrays. Whether
+that is worth it is open.
+
+The FPS figure drawn on the canvas read about 38 during this run, not 28. It
+overstates a camera-paced rate; see §10.
 
 ---
 
@@ -539,10 +566,16 @@ it.
 - **The container has only run on the development machine** (§9). On the
   deployment machine: loading the saved archive on a Docker that never built
   the image, the GPU and camera variants, the frame rate.
-- **Deployment-machine frame rates cover the benchmark clip only** (§14.3).
-  With the webcam, which is the default source, the rate there is unmeasured.
-- **Everything in §14 holds for one machine and one clip.** Camera capture,
-  several simultaneous clients and browser-side decoding are still unmeasured.
+- **Everything in §14 holds for one clip per machine.** Camera capture was
+  measured once, for the talk camera on the deployment machine (§8); several
+  simultaneous clients and browser-side decoding are still unmeasured.
+- **The on-canvas FPS figure overstates a camera-paced rate** (found
+  2026-09-29, §8). It averages per-frame rates `1/dt`, and with a camera the
+  intervals are bimodal — about 16 ms and 50 ms, because ultralytics polls for
+  the next frame with a fixed `sleep(1/fps)` — so the mean of the rates is
+  about 38 FPS while the real rate is 28. With a video file the intervals are
+  even and the figure is right. Not yet fixed.
+- **Whether the talk camera's 640×480 is sharp enough on a projector** (§8).
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
