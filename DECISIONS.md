@@ -353,9 +353,9 @@ recorded in `assets/SOURCES.md`; it verifies byte-identical against the SHA-1
 that the Wikimedia Commons API reports.
 
 **Why a clip and not the still itself.** `SOURCE` is passed straight to
-`model.predict`, and a single image yields exactly one frame. The FPS counter
-that `compose` draws is smoothed from a starting value of 0.0, so on one frame
-it shows a number that means nothing — which matters, because that canvas is
+`model.predict`, and a single image yields exactly one frame. The FPS figure
+that `compose` draws needs an interval between two frames (§20), so on one
+frame it shows 0.0 — which matters, because that canvas is
 what ends up in talks and programme booklets. The normalisation is unaffected:
 `Scale.get` initialises `lo`/`hi` directly on the first frame rather than
 easing in from zero (§4), so a still would have been correctly normalised.
@@ -435,8 +435,8 @@ full 30 FPS, but only by capturing with an explicit `cv2.VideoCapture`
 (fourcc MJPG, size, FPS) and passing frames to `predict` as arrays. Whether
 that is worth it is open.
 
-The FPS figure drawn on the canvas read about 38 during this run, not 28. It
-overstates a camera-paced rate; see §10.
+The FPS figure drawn on the canvas read about 38 during this run, not 28 —
+fixed the same day, see §20.
 
 ---
 
@@ -569,12 +569,6 @@ it.
 - **Everything in §14 holds for one clip per machine.** Camera capture was
   measured once, for the talk camera on the deployment machine (§8); several
   simultaneous clients and browser-side decoding are still unmeasured.
-- **The on-canvas FPS figure overstates a camera-paced rate** (found
-  2026-09-29, §8). It averages per-frame rates `1/dt`, and with a camera the
-  intervals are bimodal — about 16 ms and 50 ms, because ultralytics polls for
-  the next frame with a fixed `sleep(1/fps)` — so the mean of the rates is
-  about 38 FPS while the real rate is 28. With a video file the intervals are
-  even and the figure is right. Not yet fixed.
 - **Whether the talk camera's 640×480 is sharp enough on a projector** (§8).
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
@@ -1048,12 +1042,13 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19, §20 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 88 tests — runs in about 8.5 s, of
+Everything except the `weights` tests — 90 tests — runs in about 8.5 s (6.3 s
+on the deployment machine, 2026-09-29), of
 which the subprocess tests take about 6.5 s (no-camera start 1.5 s, the four
 telemetry checks 5 s — each needs a fresh interpreter importing torch); the five `weights`
 tests add about 15 s, 7 s of it the two camera stops and 5 s the loop check on
@@ -1183,3 +1178,34 @@ online without the switch.
 **Opting back in.** An explicit `YOLO_OFFLINE=0` in the environment wins,
 since the package only sets a default.
 
+---
+
+## 20. The FPS figure averages intervals, not rates
+
+**Context.** The figure on the canvas was an EMA over the per-frame rate,
+`fps = 0.9 * fps + 0.1 / dt`, starting from 0.0. With the talk camera it read
+about 38 FPS while frames arrived at 28 (measured 2026-09-29 on the deployment
+machine, §8). The cause is how ultralytics waits for a camera frame:
+`LoadStreams.__next__` sleeps a fixed `1 / fps` whenever the buffer is empty.
+A loop that needs ~20 ms per frame therefore sees intervals of either about
+16 ms (a frame was already waiting) or about 50 ms (it missed the frame by a
+little and slept a full period) — 268 of 600 intervals were under 20 ms. The
+mean of the rates over such a mix is far above the rate itself (Jensen's
+inequality: `mean(1/dt) ≥ 1/mean(dt)`). With a video file the loop is
+compute-bound, the intervals are even and the two agree, which is why the
+figures in §14 and the stills were never affected.
+
+**Decision.** `FrameRate` smooths the interval with the same EMA weight and
+inverts once. It is seeded with the first interval instead of easing in from
+zero, and shows 0.0 until there is one. `main()` and
+`tools/make_screenshot.py` share it.
+
+**Verified.** Talk camera, GPU profile: the figure read 27.6–29.6 FPS over
+30 s while a browser client counted 28.4. On `assets/sample.mp4`, old and new
+formula agree (44.4 and 44.0 for a true 44.1) — the stills stay valid.
+`tests/test_render.py` replays the 16 / 50 ms pattern; against the old formula
+it reads 42.4 instead of 30.3.
+
+`tools/benchmark.py` keeps reporting the mean of per-frame rates alongside the
+mean loop time. On its video source the two agree (§14.3: 47.3 FPS against
+21.1 ms), so its figures stand; with a camera source, read the loop time.
