@@ -1,9 +1,9 @@
 """Render the still images used in talks, programmes and handover material.
 
-Writes `docs/demo-full.png` (the whole canvas) and `docs/demo-crop.png` (the
-detection frame plus the first column of feature-map panels, at roughly 2:1 -
-the full canvas is 3.1:1 and becomes an unreadable strip in a printed
-programme).
+Writes `docs/demo-full.png` (the whole canvas, 3790 x 1372, 2.8:1) and
+`docs/demo-crop.png` (the detection frame plus the first column of feature-map
+panels, 2627 x 1372, 1.9:1 - the full canvas becomes an unreadable strip in a
+printed programme).
 
 This mirrors the body of `main()` and reuses `FeatureTap`, `GridRenderer` and
 `compose` rather than reimplementing them, exactly as the measurement harness
