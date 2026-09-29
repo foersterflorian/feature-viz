@@ -67,7 +67,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -144,6 +144,13 @@ class Config:
 
     weights: str = "yolo26n.pt"
     source: str = "0"
+
+    # Camera mode, requested when SOURCE is a camera index (DECISIONS.md §8).
+    # Opened bare, UVC cameras come up as YUYV 640x480; MJPG gives 720p at
+    # the full 30 FPS over USB 2.0. 1080p shows no gain on a projector.
+    camera_fourcc: str = "MJPG"
+    camera_size: tuple[int, int] = (1280, 720)
+    camera_fps: int = 30
 
     # Normalisation
     alpha: float = 0.08  # EMA weight; 1.0 = no smoothing
@@ -792,10 +799,10 @@ class FrameRate:
     """Smoothed frame rate for the canvas (DECISIONS.md §20).
 
     The EMA runs over the interval between frames and is inverted once,
-    instead of averaging the per-frame rate 1/dt. With a camera, ultralytics
-    polls for the next frame with a fixed sleep, so the intervals alternate
-    between about 16 and 50 ms; the mean of 1/dt then reads 38 FPS for a
-    real 28.
+    instead of averaging the per-frame rate 1/dt. For a stream source,
+    ultralytics polls for the next frame with a fixed sleep, so the intervals
+    alternate between about 16 and 50 ms; with the talk camera read that way,
+    the mean of 1/dt read 38 FPS for a real 28.
     """
 
     def __init__(self) -> None:
@@ -823,16 +830,69 @@ def _on_signal(signum: int, frame: FrameType | None) -> None:
     _stop.set()
 
 
-def results(model: YOLO, cfg: Config) -> Iterator[Results]:
+def open_camera(index: int, cfg: Config) -> cv2.VideoCapture:
+    """Open camera `index` in the mode `cfg` asks for.
+
+    ultralytics opens a camera with a bare `cv2.VideoCapture`, which OpenCV
+    sets to 640x480 - on UVC cameras that is YUYV, and a mode set beforehand
+    with v4l2-ctl does not survive the open (DECISIONS.md §8). FOURCC goes
+    first: V4L2 only offers the larger sizes at full rate once MJPG is
+    selected. A camera that lacks the mode delivers what it has; the caller
+    reports the mode actually in effect.
+    """
+    cap: cv2.VideoCapture = cv2.VideoCapture(index)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*cfg.camera_fourcc))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.camera_size[0])
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.camera_size[1])
+    cap.set(cv2.CAP_PROP_FPS, cfg.camera_fps)
+    # CAP_PROP_BUFFERSIZE stays at the driver default. With a single buffer
+    # the driver cannot capture while the loop works, so every other frame
+    # is lost: 16.7 FPS instead of 28.7 (DECISIONS.md §8). The loop is faster
+    # than the camera, so the default queue does not fill up either.
+    return cap
+
+
+def camera_mode(cap: cv2.VideoCapture) -> str:
+    """The mode in effect, e.g. "MJPG 1280x720 @ 30"."""
+    code: int = int(cap.get(cv2.CAP_PROP_FOURCC))
+    fourcc: str = "".join(chr((code >> 8 * i) & 0xFF) for i in range(4))
+    w: int = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h: int = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    return f"{fourcc} {w}x{h} @ {cap.get(cv2.CAP_PROP_FPS):.0f}"
+
+
+def results(model: YOLO, cfg: Config) -> Generator[Results, None, None]:
     """Detection results for `cfg.source`, frame by frame. A video file
     starts over when it ends; a camera or stream URL ends the run when it
     stops delivering, because then it has failed (DECISIONS.md §8).
 
-    Each pass is a fresh `predict()` call - ultralytics has no loop option.
-    Model, hooks, channel selection and normalisation state carry over, so
-    the restart is invisible in the grid.
+    A camera is read here, not by ultralytics, so that its mode can be set
+    (`open_camera`); each frame goes to `predict()` as an array. Everything
+    else is ultralytics' source handling. For a file, each pass is a fresh
+    `predict()` call - ultralytics has no loop option. Model, hooks, channel
+    selection and normalisation state carry over, so the restart is
+    invisible in the grid.
     """
     source: SourceSpec = int(cfg.source) if cfg.source.isdigit() else cfg.source
+    if isinstance(source, int):
+        cap: cv2.VideoCapture = open_camera(source, cfg)
+        print(f"[info] camera: {camera_mode(cap)}")
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    return
+                # Without stream=True, predict() returns one Results per
+                # input image - here exactly one.
+                yield cast(
+                    "list[Results]",
+                    model.predict(
+                        source=frame, imgsz=cfg.imgsz, verbose=False, device=cfg.device
+                    ),
+                )[0]
+        finally:
+            # Also reached when main() closes the generator on Ctrl+C.
+            cap.release()
     loop: bool = isinstance(source, str) and Path(source).is_file()
     while True:
         # With stream=True the call always yields an iterator of Results; the
@@ -856,10 +916,11 @@ def results(model: YOLO, cfg: Config) -> Iterator[Results]:
 def close_source(model: YOLO) -> None:
     """Stop ultralytics' frame reader before the interpreter exits.
 
-    For a camera or a stream URL, ultralytics reads frames in a daemon thread
-    (`LoadStreams`) and only closes it when the source runs dry - which a
-    camera never does. Leaving the loop by Ctrl+C or SIGTERM left that thread
-    inside `VideoCapture.read()` while the interpreter shut down, and the C++
+    For a stream URL, ultralytics reads frames in a daemon thread
+    (`LoadStreams`) and only closes it when the source runs dry. A camera
+    was read that way too until results() took it over, and a camera never
+    runs dry: leaving the loop by Ctrl+C or SIGTERM left that thread inside
+    `VideoCapture.read()` while the interpreter shut down, and the C++
     runtime aborted: "terminate called without an active exception", exit
     134 (DECISIONS.md §8).
 
@@ -909,7 +970,7 @@ def main() -> None:
         # The bound port, not cfg.port: with PORT=0 the OS picks one.
         print(f"[info] stream: http://localhost:{server.server_address[1]}/")
 
-    stream: Iterator[Results] = results(model, cfg)
+    stream: Generator[Results, None, None] = results(model, cfg)
 
     rate: FrameRate = FrameRate()
     grid: BGRImage | None = None
@@ -943,6 +1004,9 @@ def main() -> None:
                 if cv2.waitKey(1) & 0xFF == 27:  # ESC
                     break
     finally:
+        # Releases a camera opened by results(); close_source() stops
+        # ultralytics' reader for a stream URL.
+        stream.close()
         tap.close()
         close_source(model)
         if cfg.display_mode == "window":
