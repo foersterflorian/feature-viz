@@ -483,7 +483,8 @@ A saved image does not have that problem.
 
 **Decision.** `Dockerfile` and `compose.yaml` in the repository root; `docker
 compose up` starts the demonstration setup. Implemented and verified
-2026-09-28 on the development machine.
+2026-09-28 on the development machine, and on 2026-09-29 on the deployment
+machine (below).
 
 **The image runs what the tests ran.** Base is `python:3.12-slim`, pinned by
 digest; on top of it goes exactly what `pdm.lock` pins, installed with
@@ -580,10 +581,43 @@ zstd -dc feature-viz-0.1.0.tar.zst | docker load
 ```
 
 Image 6.6 GB, archive 2.9 GB with zstd, build about 5 min with a cold cache
-(development machine, 2026-09-28). Deleting the image and loading the archive
-gave a working, healthy container — but the load took 6 s, so the layers were
-most likely still in the local build cache; a load on a machine that never
-built the image is still open (§10).
+(development machine, 2026-09-28).
+
+**Loading on a machine that never built the image** (deployment machine,
+2026-09-29, fresh Docker 29.8.1 install, nvidia-container-toolkit 1.20.1).
+The development machine's archive loaded in 18 s and ran with `--network
+none`: healthy after about 9 s on the sample clip, GPU in use, `docker stop`
+exit 0. The archive works as intended.
+
+*Checking the image ID depends on Docker's image store.* The ID recorded on
+the development machine (`sha256:e37638ec…`) is the image *config* digest,
+which is what the classic image store reports. Docker 29 uses the containerd
+image store on new installs, and there `docker image inspect --format
+'{{.Id}}'` reports the *manifest* digest instead (`sha256:faa6558e…` for the
+same archive). Both are in the archive: `manifest.json` names the config
+blob, `index.json` the manifest. To compare across machines, read the config
+digest from the archive:
+
+```bash
+zstd -dc feature-viz-0.1.0.tar.zst | tar -xO manifest.json
+```
+
+**Rebuilt and run on the deployment machine** (2026-09-29, from `dev` with
+the camera read by `results()`, §8). Build 8.5 min with a cold cache; the
+image's `demonstrator.py` hashes identical to the repository's. Docker 29
+reports 3.39 GB content size and 10 GB disk usage for the unpacked image —
+not comparable with the 6.6 GB the classic store reported. All three variants
+became healthy in about 6 s and stopped with exit 0:
+
+| Variant | Frames at a host client, 20 s | Note |
+|---|---|---|
+| GPU + webcam (`.env`: UGREEN by-id path, `VIDEO_GID=44`) | 28.7 FPS | `[info] camera: MJPG 1280x720 @ 30`, the camera's rate |
+| GPU + sample clip | 41.8 FPS | includes the MJPEG client's cost |
+| CPU + sample clip | 50.1 FPS | |
+
+`tools/benchmark.py` in the container (GPU profile, three runs): 43.8 / 46.9 /
+46.7 FPS against 44.4 / 47.6 / 47.3 on the host (§14.3) — equal within
+run-to-run spread, as on the development machine.
 
 **Known limitation.** Docker does not abstract the GPU. A target machine still
 needs an NVIDIA card, a driver ≥ 580 and the container toolkit — or it runs the
@@ -596,15 +630,9 @@ CPU variant.
 Everything below was reasoned about but not measured. Verify before relying on
 it.
 
-- **The container has only run on the development machine** (§9). On the
-  deployment machine: loading the saved archive on a Docker that never built
-  the image, the GPU and camera variants, the frame rate.
 - **Everything in §14 holds for one clip per machine.** Camera capture was
   measured once, for the talk camera on the deployment machine (§8); several
   simultaneous clients and browser-side decoding are still unmeasured.
-- **The container with the camera read by `results()`** (§8, §9). The own
-  capture uses the same OpenCV V4L2 backend as ultralytics did, but the
-  camera variant of the container has not been run since the change.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
@@ -905,6 +933,8 @@ by up to 3 FPS between runs, and the first run of the default configuration
 was the slowest (44.4). Because of that, the strip's cost (§14.2: 1–3 FPS)
 cannot be read from this table — it is within the noise. The 220 px strip
 rejected in §14.2 on the 4070 Ti was not re-measured here.
+
+**In the container** the same benchmark gives 43.8 / 46.9 / 46.7 FPS (§9).
 
 **The CPU profile is again the fastest** (§14): smaller input, three layers
 and a grid refreshed every third frame outweigh CPU inference on this machine
