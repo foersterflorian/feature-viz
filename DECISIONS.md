@@ -539,8 +539,8 @@ it.
 - **The container has only run on the development machine** (§9). On the
   deployment machine: loading the saved archive on a Docker that never built
   the image, the GPU and camera variants, the frame rate.
-- **No measurement from the deployment machine is recorded** (§14): all
-  frame rates in this file come from the development machine.
+- **Deployment-machine frame rates cover the benchmark clip only** (§14.3).
+  With the webcam, which is the default source, the rate there is unmeasured.
 - **Everything in §14 holds for one machine and one clip.** Camera capture,
   several simultaneous clients and browser-side decoding are still unmeasured.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
@@ -678,11 +678,7 @@ deployment machine (RTX 4090, AMD 16-core) that runs the demonstrations — see
 `CLAUDE.md`. Every figure in this section, §14.1 and §14.2 is therefore a
 lower bound for the demonstration.
 
-**Deployment-machine figures are missing.** Measurements were run on the RTX
-4090 in September 2026 but not recorded here. The only figure that survived
-is indirect: the stills generated there before the funding strip showed about
-50 FPS on the canvas (`docs/README.md`, commit 4e55fa1). Re-run
-`tools/benchmark.py` there and add the output as §14.3.
+**Deployment-machine figures** are in §14.3.
 
 **Method.** A 1200-frame 1280×720 clip built from the ultralytics `bus.jpg`
 asset with a slow pan and brightness drift, so that consecutive frames differ
@@ -811,6 +807,50 @@ About 1–3 FPS on the GPU profile, 0.2–1.4 FPS on the CPU profile. The strip
 itself is cached; what is paid per frame is the `np.vstack` copy and 13% more
 pixels through the JPEG encoder. The 220 px variant pushed the GPU mean below
 30 FPS on this card and was dropped.
+
+### 14.3 Deployment machine
+
+Measured 2026-09-29 on the **deployment machine**: Pop!_OS, RTX 4090 (24 GB),
+AMD Ryzen 9 7950X3D (16 cores, 32 threads), driver 580.173.02, torch
+2.14.0+cu130, ultralytics 8.4.157, OpenCV 5.0.0. Commit `f4359fe`. Same
+harness and clip as §14.2 (`tools/benchmark.py`, `assets/sample.mp4`, 60
+warm-up, 240 measured), so the two tables compare directly.
+
+```bash
+python tools/benchmark.py --runs 3
+FORCE_CPU=1 python tools/benchmark.py --runs 3
+python tools/benchmark.py --runs 3 --no-funding-strip
+```
+
+| Configuration | Canvas | FPS mean (runs 1 / 2 / 3) | Median | p5 | Loop |
+|---|---|---|---|---|---|
+| GPU profile, 160 px strip | 3790×1372 | 44.4 / 47.6 / 47.3 | 45.9–48.3 | 35.6–43.8 | 21.0–22.5 ms |
+| GPU profile, no strip | 3790×1212 | 49.6 / 47.8 / 47.7 | 48.1–50.1 | 42.0–45.9 | 20.2–21.0 ms |
+| CPU profile (`FORCE_CPU=1`), 160 px strip | 3520×941 | 50.7 / 51.0 / 50.5 | 51.2–51.6 | 42.8–43.4 | 19.6–19.8 ms |
+
+**The 30 FPS target is met with room to spare**: about 47 FPS in the default
+GPU profile against 31 on the development machine, with p5 above 35 even in
+the weakest run. This agrees with the ~50 FPS read off the stills generated
+here earlier (`docs/README.md`), which were taken before the funding strip.
+
+**Why it is faster is not separated.** Both the GPU and the CPU differ from
+the development machine. §14 attributes most of the loop to CPU work (JPEG
+encode, compose, render), so the faster CPU is the likely main cause, but no
+per-stage breakdown was taken here.
+
+**Spread is larger than on the development machine.** The GPU profile varies
+by up to 3 FPS between runs, and the first run of the default configuration
+was the slowest (44.4). Because of that, the strip's cost (§14.2: 1–3 FPS)
+cannot be read from this table — it is within the noise. The 220 px strip
+rejected in §14.2 on the 4070 Ti was not re-measured here.
+
+**The CPU profile is again the fastest** (§14): smaller input, three layers
+and a grid refreshed every third frame outweigh CPU inference on this machine
+too.
+
+The full test suite also ran here on the same day and commit: 93 passed, 0
+skipped, with the UGREEN USB webcam attached, so the `weights`, `gpu` and
+`camera` tiers all ran (§18).
 
 ---
 
