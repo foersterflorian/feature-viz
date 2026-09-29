@@ -47,6 +47,7 @@ DISPLAY_MODE=window feature-viz
 SOURCE=assets/sample.mp4 feature-viz     # sample clip; webcam is the default
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
 
+./start-container.sh                     # container: GPU + webcam, checks .env/image/camera first
 docker compose up --build                # container: GPU + webcam (DECISIONS.md §9)
 docker compose -f compose.yaml -f compose.cpu.yaml up   # container, CPU, sample clip
 

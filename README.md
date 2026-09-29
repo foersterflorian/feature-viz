@@ -23,6 +23,7 @@ nvidia-container-toolkit ≥ 1.18 with a CDI spec
 
 ```bash
 cp .env.example .env         # set CAMERA_DEVICE and VIDEO_GID for this machine
+./start-container.sh         # GPU + webcam, after checking .env, image and camera
 docker compose up --build    # GPU + webcam, stream on http://localhost:8080/
 docker compose -f compose.yaml -f compose.sample.yaml up   # GPU, sample clip
 docker compose -f compose.yaml -f compose.cpu.yaml up      # no GPU, sample clip

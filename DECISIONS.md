@@ -530,6 +530,20 @@ ultralytics' `settings.json`.
 | `docker compose -f compose.yaml -f compose.sample.yaml up` | yes | sample clip |
 | `docker compose -f compose.yaml -f compose.cpu.yaml up` | no | sample clip |
 
+**`start-container.sh` for the demonstration** (2026-09-29). It runs
+`docker compose up` — the same entry point, not a second one — after three
+checks that otherwise fail late or silently in front of an audience: no
+`.env`, no image (Compose would quietly build one, downloading about 6 GB,
+where a loaded archive was intended), no camera at `CAMERA_DEVICE`. Each ends
+with exit 1 and the command that fixes it. The image name comes from
+`docker compose config --images`, so a version bump does not touch the
+script; `CAMERA_DEVICE` and `HOST_PORT` from the shell win over `.env`, as
+for Compose. Verified on the deployment machine: all three refusals, a start
+via symlink from another directory, and a normal run (28.7 FPS at a client,
+Ctrl+C stops the container with exit 0; the script itself returns Compose's
+130). It has no automated test: every path needs a Docker daemon, and the
+failure paths are three `[ -e ]`-style checks.
+
 The CPU variant exists because the CPU profile does (§5): without a CUDA
 device the demonstrator selects it by itself, through the same code path. The
 overrides use Compose's `!reset` / `!override`; the variant file must come
