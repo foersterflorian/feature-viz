@@ -562,8 +562,10 @@ variants were run end to end, each delivering frames to the host.
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
-- *Image tag follows the package version* (`feature-viz:0.1.0`);
-  `bump-my-version` updates `compose.yaml` along with `pyproject.toml`.
+- *Image tag follows the package version* (`feature-viz:0.2.0`);
+  `bump-my-version` updates `compose.yaml` and the archive commands in
+  `README.md` along with `pyproject.toml`. Bump with `--new-version`: the
+  configured pre-release part makes a plain `bump minor` produce `0.2.0dev0`.
 - *Build context is an allow-list* (`.dockerignore`): without it, `.venv`
   (6 GB) and local `*.pt` files would be sent to the daemon.
 - *Native Docker Engine, not Docker Desktop.* Docker Desktop on Linux runs its
@@ -618,6 +620,16 @@ became healthy in about 6 s and stopped with exit 0:
 `tools/benchmark.py` in the container (GPU profile, three runs): 43.8 / 46.9 /
 46.7 FPS against 44.4 / 47.6 / 47.3 on the host (§14.3) — equal within
 run-to-run spread, as on the development machine.
+
+**Version 0.2.0** (2026-09-29, commit `2f93b18`). The camera change of §8
+makes the image behave differently from the 0.1.0 archive, so it carries a
+new tag. Built on the deployment machine (7.5 min: the version change
+invalidates the cache early), `demonstrator.py` identical to the
+repository's, webcam variant healthy at 28.7 FPS with MJPG 1280×720, exit 0
+on stop. Archive `feature-viz-0.2.0.tar.zst`: 3.3 GB, written in 17 s,
+`zstd -t` clean. Config digest `sha256:26e40e70…`, manifest digest
+`sha256:010403a8…`; the full values and the file's SHA-256 are kept next to
+the archive, outside the repository.
 
 **Known limitation.** Docker does not abstract the GPU. A target machine still
 needs an NVIDIA card, a driver ≥ 580 and the container toolkit — or it runs the
