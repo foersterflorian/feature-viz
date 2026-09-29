@@ -786,6 +786,34 @@ def start_server(cfg: Config, buffer: FrameBuffer, info: str) -> ThreadingHTTPSe
 
 
 # ==========================================================================
+# Frame rate
+# ==========================================================================
+class FrameRate:
+    """Smoothed frame rate for the canvas (DECISIONS.md §20).
+
+    The EMA runs over the interval between frames and is inverted once,
+    instead of averaging the per-frame rate 1/dt. With a camera, ultralytics
+    polls for the next frame with a fixed sleep, so the intervals alternate
+    between about 16 and 50 ms; the mean of 1/dt then reads 38 FPS for a
+    real 28.
+    """
+
+    def __init__(self) -> None:
+        self.last: float | None = None
+        self.interval: float | None = None
+
+    def tick(self, now: float) -> float:
+        """Record a frame at `now` (seconds) and return the smoothed rate.
+        0.0 until a second frame gives a first interval, which then seeds
+        the average instead of easing in from zero."""
+        if self.last is not None:
+            dt: float = max(now - self.last, 1e-6)
+            self.interval = dt if self.interval is None else 0.9 * self.interval + 0.1 * dt
+        self.last = now
+        return 0.0 if self.interval is None else 1.0 / self.interval
+
+
+# ==========================================================================
 # Main loop
 # ==========================================================================
 _stop: Final[threading.Event] = threading.Event()
@@ -883,8 +911,7 @@ def main() -> None:
 
     stream: Iterator[Results] = results(model, cfg)
 
-    t_prev: float = time.perf_counter()
-    fps: float = 0.0
+    rate: FrameRate = FrameRate()
     grid: BGRImage | None = None
     n: int = 0
 
@@ -902,10 +929,7 @@ def main() -> None:
                 grid = renderer.render()
             n += 1
 
-            now: float = time.perf_counter()
-            fps = 0.9 * fps + 0.1 * (1.0 / max(now - t_prev, 1e-6))
-            t_prev = now
-
+            fps: float = rate.tick(time.perf_counter())
             canvas: BGRImage = compose(result.plot(), grid, fps, info)
 
             if buffer is not None:

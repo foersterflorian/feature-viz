@@ -36,6 +36,7 @@ from feature_viz.demonstrator import (
     BGRImage,
     Config,
     FeatureTap,
+    FrameRate,
     GridRenderer,
     build_config,
     compose,
@@ -71,8 +72,7 @@ def main() -> int:
         ),
     )
 
-    t_prev: float = time.perf_counter()
-    fps: float = 0.0
+    rate: FrameRate = FrameRate()
     grid: BGRImage | None = None
     n: int = 0
 
@@ -84,9 +84,7 @@ def main() -> int:
                 grid = renderer.render()
             n += 1
 
-            now: float = time.perf_counter()
-            fps = 0.9 * fps + 0.1 * (1.0 / max(now - t_prev, 1e-6))
-            t_prev = now
+            fps: float = rate.tick(time.perf_counter())
 
             canvas: BGRImage = compose(result.plot(), grid, fps, info)
             # Kept for its cost, not its output - see the module docstring.
