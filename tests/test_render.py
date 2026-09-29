@@ -1,4 +1,4 @@
-"""Normalisation and canvas layout (DECISIONS.md §4, §15, §17)."""
+"""Normalisation, frame rate and canvas layout (DECISIONS.md §4, §15, §17, §20)."""
 
 from __future__ import annotations
 
@@ -55,6 +55,29 @@ def test_scale_accepts_float16(cpu_cfg: demo.Config) -> None:
     assert demo.Scale(cpu_cfg).get(t.half()) == pytest.approx(
         demo.Scale(cpu_cfg).get(t), abs=1e-3
     )
+
+
+# --------------------------------------------------------------------------
+# FrameRate (§20)
+# --------------------------------------------------------------------------
+def test_frame_rate_averages_intervals_not_rates() -> None:
+    """The camera pattern measured in §20: intervals alternating 16 / 50 ms
+    are 30 FPS, not the 41 that a mean of 1/dt reports."""
+    rate: demo.FrameRate = demo.FrameRate()
+    now: float = 0.0
+    fps: float = rate.tick(now)
+    for i in range(200):
+        now += 0.016 if i % 2 else 0.050
+        fps = rate.tick(now)
+    assert fps == pytest.approx(1.0 / 0.033, abs=1.5)
+
+
+def test_frame_rate_starts_on_the_first_interval_instead_of_easing_in() -> None:
+    """§8 relies on this: one frame has no interval, two already show the
+    true rate."""
+    rate: demo.FrameRate = demo.FrameRate()
+    assert rate.tick(10.0) == 0.0
+    assert rate.tick(10.02) == pytest.approx(50.0)
 
 
 # --------------------------------------------------------------------------
