@@ -208,6 +208,22 @@ def test_unusable_source_stops_before_anything_starts(tmp_path: Path) -> None:
 
 
 
+@pytest.mark.camera
+def test_camera_opens_in_the_configured_mode(gpu_cfg: demo.Config) -> None:
+    """§8: opened bare, the camera comes up as YUYV 640x480. Checked against
+    the talk camera; a camera without MJPG 720p would fail here and should
+    then be judged by the `[info] camera:` line instead."""
+    cap: cv2.VideoCapture = demo.open_camera(0, gpu_cfg)
+    try:
+        ok, frame = cap.read()
+        mode: str = demo.camera_mode(cap)
+    finally:
+        cap.release()
+    assert ok
+    assert mode.startswith("MJPG 1280x720"), mode
+    assert frame.shape[:2] == (720, 1280)
+
+
 @pytest.mark.weights
 @pytest.mark.camera
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM], ids=["SIGINT", "SIGTERM"])

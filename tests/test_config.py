@@ -187,14 +187,66 @@ def test_video_file_starts_over(cpu_cfg: demo.Config, tmp_path: Path) -> None:
     assert model.passes == 3
 
 
-@pytest.mark.parametrize("source", ["0", "rtsp://camera.local/stream"])
-def test_camera_and_stream_end_the_run(cpu_cfg: demo.Config, source: str) -> None:
-    """A camera that stops delivering has failed; restarting it forever
+def test_stream_ends_the_run(cpu_cfg: demo.Config) -> None:
+    """A stream that stops delivering has failed; restarting it forever
     would hide that."""
-    cpu_cfg.source = source
+    cpu_cfg.source = "rtsp://camera.local/stream"
     model: _FakeModel = _FakeModel(frames_per_pass=3)
     assert _take(model, cpu_cfg, 100) == [0, 1, 2]
     assert model.passes == 1
+
+
+class _FakeCapture:
+    """Stands in for the cv2.VideoCapture that open_camera() returns."""
+
+    def __init__(self, frames: int) -> None:
+        self.frames: list[int] = list(range(frames))
+        self.released: bool = False
+        self.reads: int = 0
+
+    def read(self) -> tuple[bool, int | None]:
+        self.reads += 1
+        # A regression in the end-of-camera check must fail, not hang the suite.
+        if self.reads > 100:
+            raise RuntimeError("results() keeps reading a camera that has failed")
+        return (True, self.frames.pop(0)) if self.frames else (False, None)
+
+    def get(self, prop: int) -> float:
+        return 0.0
+
+    def release(self) -> None:
+        self.released = True
+
+
+class _FramePredictor:
+    """predict() on one array returns one result - here the frame itself."""
+
+    def predict(self, source: int, **kwargs: object) -> list[int]:
+        return [source]
+
+
+def test_camera_ends_the_run_and_releases_the_device(
+    cpu_cfg: demo.Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§8: the camera is read by results(), not by ultralytics. A camera that
+    stops delivering ends the run; stopping early (Ctrl+C closes the
+    generator in main()) must release the device as well."""
+    cpu_cfg.source = "0"
+    caps: list[_FakeCapture] = []
+
+    def fake_open(index: int, cfg: demo.Config) -> _FakeCapture:
+        caps.append(_FakeCapture(frames=3))
+        return caps[-1]
+
+    monkeypatch.setattr(demo, "open_camera", fake_open)
+    model: _FramePredictor = _FramePredictor()
+    assert [r for r in demo.results(model, cpu_cfg)] == [0, 1, 2]  # type: ignore[arg-type]
+    assert caps[0].released
+
+    gen = demo.results(model, cpu_cfg)  # type: ignore[arg-type]
+    assert next(gen) == 0
+    gen.close()
+    assert caps[1].released
 
 
 def test_empty_video_file_does_not_spin(cpu_cfg: demo.Config, tmp_path: Path) -> None:
