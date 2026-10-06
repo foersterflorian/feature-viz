@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import http.client
+import threading
 import time
 from collections.abc import Iterator
 from http.server import ThreadingHTTPServer
@@ -177,6 +178,80 @@ def test_closed_tab_does_not_disturb_the_server(
         for _ in range(4):
             resp.readline()
         assert resp.read(5) == b"after"
+
+
+def test_page_pulls_frames_instead_of_streaming(server: tuple[str, demo.FrameBuffer]) -> None:
+    """§7: Firefox freezes on the MJPEG push stream at full frame rate. The
+    page must pull single frames; MJPEG is only the no-JavaScript fallback."""
+    page: str = get(server[0] + "/")[2].decode("utf-8")
+    assert 'fetch("/frame.jpg?after="' in page
+    assert page.count("/stream.mjpg") == 1
+    assert '<noscript><img src="/stream.mjpg"' in page
+
+
+def test_frame_returns_the_newest_frame_with_its_sequence(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    """§7: the page sends the sequence back as `after` on its next request."""
+    fresh_buffer.publish(b"old")
+    fresh_buffer.publish(b"new")
+    with urlopen(server[0] + "/frame.jpg", timeout=5) as resp:
+        assert resp.headers.get_content_type() == "image/jpeg"
+        assert resp.headers["X-Frame-Seq"] == "2"
+        assert resp.read() == b"new"
+
+
+def test_frame_after_waits_for_a_newer_frame(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    """§7: a client that already has the newest frame is held until the
+    next one exists, so polling in a loop does not spin on the same frame."""
+    fresh_buffer.publish(b"seen")
+    later: threading.Timer = threading.Timer(0.3, fresh_buffer.publish, args=(b"next",))
+    later.start()
+    t0: float = time.monotonic()
+    try:
+        with urlopen(server[0] + "/frame.jpg?after=1", timeout=5) as resp:
+            assert resp.read() == b"next"
+            assert resp.headers["X-Frame-Seq"] == "2"
+    finally:
+        later.join()
+    assert time.monotonic() - t0 >= 0.25
+
+
+def test_frame_is_503_before_the_first_frame(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    """§7: the page retries until the model has loaded."""
+    assert get(server[0] + "/frame.jpg")[0] == 503
+
+
+def test_frame_rejects_a_malformed_after(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    fresh_buffer.publish(b"frame")
+    assert get(server[0] + "/frame.jpg?after=x")[0] == 400
+
+
+def test_frames_share_one_connection(
+    server: tuple[str, demo.FrameBuffer], fresh_buffer: demo.FrameBuffer
+) -> None:
+    """§7: one request per frame; under HTTP/1.0 each would open a new TCP
+    connection, about 40 per second per viewer."""
+    fresh_buffer.publish(b"frame")
+    host, port = server[0].removeprefix("http://").split(":")
+    conn: http.client.HTTPConnection = http.client.HTTPConnection(host, int(port), timeout=5)
+    try:
+        conn.request("GET", "/frame.jpg")
+        first: http.client.HTTPResponse = conn.getresponse()
+        first.read()
+        assert not first.will_close
+        sock: object = conn.sock
+        conn.request("GET", "/frame.jpg")
+        conn.getresponse().read()
+        assert conn.sock is sock
+    finally:
+        conn.close()
 
 
 def test_stream_delivers_the_published_frame_as_multipart(
