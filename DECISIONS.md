@@ -260,8 +260,12 @@ case prefer OpenVINO over ONNX Runtime on x86 — usually noticeably faster.
 
 ## 7. Output: MJPEG over HTTP, not an OpenCV window
 
-**Decision.** Default output is an MJPEG stream on port 8080.
-`DISPLAY_MODE=window` restores `cv2.imshow` for local development.
+**Decision.** Default output is a web page on port 8080 that pulls one JPEG
+at a time from `/frame.jpg` and draws it onto a canvas. `/stream.mjpg` (MJPEG)
+remains for players such as VLC or ffplay and as the page's `<noscript>`
+fallback. `DISPLAY_MODE=window` restores `cv2.imshow` for local development.
+The value of `DISPLAY_MODE` for the browser output is still `mjpeg`; renaming
+it would break existing invocations for no gain.
 
 **Why.** `cv2.imshow` requires a desktop session. Under X11 that means
 `DISPLAY`, a mounted `/tmp/.X11-unix` and an `xhost` grant; under Wayland it
@@ -276,11 +280,51 @@ frame budget (§14). It is still affordable inside 33 ms, but it is the first
 thing to trade away if headroom is ever needed.
 
 **Buffering.** The server holds only the most recently encoded frame. A slow
-client skips frames instead of throttling the inference loop. The skipping
-path has not been exercised: the one client measured kept up with every
-published frame (§14). Since 2026-09-28 the buffer's skipping semantics are
-covered by `tests/test_buffer.py`; a real slow or remote client is still
-unmeasured.
+client skips frames instead of throttling the inference loop. The buffer's
+skipping semantics are covered by `tests/test_buffer.py` (since 2026-09-28).
+Since the page pulls frames (below), skipping is exercised in practice: Firefox
+draws about 35 of 43 published frames per second (§14.4). A remote client is
+still unmeasured (§10).
+
+**Pull, not push (2026-10-06).** The page used to show `/stream.mjpg` in an
+`<img>`. It worked in Chrome, Brave and the VS Code view; in Firefox the
+picture went black, stayed black from the start, or crawled, while the static
+footer rendered normally. Measured on the deployment machine (§14.4): the
+stream carries about 44 frames of 3790×1372 px per second, roughly 50 MB/s.
+Firefox does not drop MJPEG parts it cannot keep up with, and its page stopped
+responding entirely — animation-frame rate 0.2 Hz, 2 of 300 timer ticks in
+30 s. That held with and without CSS downscaling and with software
+WebRender, so neither the GPU path nor the scaling is the cause. Throttling
+the same stream to about 15 frames per second kept Firefox responsive; the
+threshold lies somewhere between about 22 and 44 per second and was not
+pinned down. Chrome skips frames it cannot draw and was unaffected.
+
+The page now requests the next frame only once the previous one is drawn
+(`fetch` → `createImageBitmap` → canvas). Every browser receives as many frames
+as it can draw, and no backlog can build up. `/frame.jpg?after=<seq>` holds
+the request until a frame newer than `seq` exists, so a fast client does not
+fetch the same frame repeatedly; `X-Frame-Seq` carries the sequence back. The
+handler speaks HTTP/1.1 so the roughly 40 requests per second per viewer reuse
+one connection instead of opening one each (`BaseHTTPRequestHandler` defaults
+to HTTP/1.0). `/stream.mjpg` therefore sends `Connection: close`: it has no
+length and ends only when the client leaves.
+
+*Cost.* One request per frame, serialised: request, transfer and decode of
+the next frame start only after the previous one is drawn. On localhost this
+costs Chrome about 4 of 44 frames per second (§14.4). Requesting the next
+frame while the current one decodes would close the gap; it was not done
+because the plain loop already beats the old MJPEG page in Chrome. Over a
+network the transfer alone — about 9 ms for 1.1 MB on 1 Gbit/s — adds to
+every frame (§10).
+
+*Rejected: capping the frame rate per client on the server.* Simpler, but the
+right cap depends on the viewer's machine, not the server: a fixed 20–25 FPS
+would throttle the projector box for nothing and could still overwhelm a weak
+laptop.
+
+*Rejected: keeping MJPEG on the page and making frames smaller.* Lower JPEG
+quality or a smaller canvas moves Firefox's threshold but does not remove it,
+and costs exactly the detail the demonstrator exists to show.
 
 **`/healthz`** reports whether frames keep coming, not whether the process is
 alive: 200 `ok` while the newest frame is at most `HEALTH_MAX_AGE` (5 s) old,
@@ -659,6 +703,11 @@ it.
 - **Everything in §14 holds for one clip per machine.** Camera capture was
   measured once, for the talk camera on the deployment machine (§8); several
   simultaneous clients and browser-side decoding are still unmeasured.
+- **The page over a network.** The frame pull (§7, §14.4) was measured on
+  localhost only. Over a LAN every frame also pays its transfer, about 9 ms
+  per 1.1 MB at 1 Gbit/s, serialised with decoding; the frame rate a remote
+  viewer gets, and whether pipelining the next request is then needed, is
+  unmeasured. So is Brave (Chromium-based, expected to behave like Chrome).
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
@@ -720,9 +769,10 @@ HTTP. If web-framework types leak into the renderer, replacing the framework
 later means rewriting the project.
 
 **The one trap that matters:** FastAPI is async, the inference loop is
-blocking. The loop must stay an ordinary `threading.Thread`. Write the MJPEG
-endpoint as a **synchronous** `def` returning a `StreamingResponse` — Starlette
-iterates sync generators in a threadpool, so a blocking wait inside is safe.
+blocking. The loop must stay an ordinary `threading.Thread`. Write the frame
+endpoints as **synchronous** `def`s (the MJPEG one returning a
+`StreamingResponse`) — Starlette runs sync endpoints and iterates sync
+generators in a threadpool, so a blocking wait inside is safe.
 An `async def` there blocks the event loop and stalls the whole server.
 
 Parameters would then split by cost: gamma/alpha/quantiles/vis_every take
@@ -970,6 +1020,45 @@ The full test suite also ran here on the same day and commit: 93 passed, 0
 skipped, with the UGREEN USB webcam attached, so the `weights`, `gpu` and
 `camera` tiers all ran (§18).
 
+### 14.4 Frames drawn by the browser (§7)
+
+Measured 2026-10-06 on the **deployment machine**: RTX 4090, driver
+580.173.02, torch 2.14.0+cu130, ultralytics 8.4.157, OpenCV 5.0.0, Google
+Chrome 154.0.8037.97, Firefox 156.0.1, both with a fresh profile per run.
+GPU profile, `assets/sample.mp4`, canvas 3790×1372, JPEG quality 80: 1.13 MB
+per frame. The server published 42.7–44.0 frames per second during the runs
+(counted on `/stream.mjpg` before and after). Each run lasted 30 s, one
+browser window on localhost, nothing else attached.
+
+**Before, MJPEG in `<img>` (commit `1833c91`).** A probe page showed the
+stream exactly as the real page did and sampled it into a canvas.
+
+| Browser | Stream | Page animation-frame rate | Frames seen |
+|---|---|---|---|
+| Firefox | full | 0.2–0.3 Hz (2 of 300 timer ticks) | — |
+| Firefox | software WebRender, full | 0.2 Hz | — |
+| Firefox | throttled to ≈15 FPS (44/3, 2 runs) | 36.6 / 38.3 Hz | — |
+| Chrome | full (3 runs) | 38.2–38.7 Hz | 37.5 / 37.7 / 37.7 FPS |
+
+Chrome's figure is a lower bound: sampling at every animation frame forced
+a synchronous decode and pulled the rate down from 60 Hz to about 38 Hz,
+and almost every sample found a new frame. Firefox's sampling saw an unchanging
+picture throughout (why was not investigated), so only its page rate is
+meaningful. The throttling proxy could only forward whole frames of
+the 44 FPS stream, so its nominal rates were really 44/n; "≈15" is 44/3.
+
+**After, frame pull (commit `1aaa69a`).** The real page, with a counter
+injected at run time around `drawImage` on the stream canvas — the served
+code was otherwise unchanged.
+
+| Browser | Frames drawn (runs 1 / 2 / 3) | Page animation-frame rate | Gap median / p95 / max |
+|---|---|---|---|
+| Chrome | 40.0 / 40.2 / 40.2 FPS | 59.8–59.9 Hz | 24 / 29–30 / 56–62 ms |
+| Firefox | 35.2 / 34.9 / 35.2 FPS | 44.6–44.7 Hz | 28 / 30–31 / 104–209 ms |
+
+Chrome draws more frames than the lower bound measured before and keeps
+its page at the full 60 Hz. Firefox goes from a frozen page to 35 FPS.
+
 ---
 
 ## 15. Labels: a caption strip, not text on the tiles
@@ -1022,7 +1111,7 @@ combined work, and the recipient cannot be granted it under MIT. Labelling the
 repository MIT would tell readers something untrue about what they receive.
 
 **§13 is the sharp edge.** The demonstrator binds `0.0.0.0` and serves an HTML
-page plus an MJPEG stream (§7), so users interact with it over a network.
+page plus its frames (§7), so users interact with it over a network.
 AGPL §13 then requires that they be offered the Corresponding Source. That
 obligation exists regardless of what the LICENSE file says; declaring MIT would
 only have hidden it. `PAGE` therefore carries a footer with copyright, licence
@@ -1138,7 +1227,7 @@ file it protects:
 | HTTP | `test_server.py` | nothing | §7, §16, §17 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
-Everything except the `weights` tests — 91 tests — runs in about 8.5 s (7.7 s
+Everything except the `weights` tests — 97 tests — runs in about 8.5 s (7.7 s
 on the deployment machine with the camera test, 2026-09-29), of
 which the subprocess tests take about 6.5 s (no-camera start 1.5 s, the four
 telemetry checks 5 s — each needs a fresh interpreter importing torch); the five `weights`
