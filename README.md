@@ -32,8 +32,8 @@ docker compose -f compose.yaml -f compose.cpu.yaml up      # no GPU, sample clip
 To move or archive the image as one self-contained file:
 
 ```bash
-docker save feature-viz:0.2.0 | zstd -T0 -o feature-viz-0.2.0.tar.zst
-zstd -dc feature-viz-0.2.0.tar.zst | docker load
+docker save feature-viz:0.2.1 | zstd -T0 -o feature-viz-0.2.1.tar.zst
+zstd -dc feature-viz-0.2.1.tar.zst | docker load
 ```
 
 Details and rationale: `DECISIONS.md` §9.
