@@ -313,9 +313,14 @@ length and ends only when the client leaves.
 the next frame start only after the previous one is drawn. On localhost this
 costs Chrome about 4 of 44 frames per second (§14.4). Requesting the next
 frame while the current one decodes would close the gap; it was not done
-because the plain loop already beats the old MJPEG page in Chrome. Over a
-network the transfer alone — about 9 ms for 1.1 MB on 1 Gbit/s — adds to
-every frame (§10).
+because the plain loop already beats the old MJPEG page in Chrome.
+
+*Scope: the page is viewed on the demo machine itself.* That is the setup
+for talks, and it is the only one measured (§14.4). Viewing over a network
+is not a goal (decided 2026-10-06). It would still work, but every frame
+would also pay its transfer — about 9 ms for 1.1 MB on 1 Gbit/s — serialised
+with decoding, so a remote viewer would get fewer frames. Measure before
+relying on it, and pipeline the next request first if it falls short.
 
 *Rejected: capping the frame rate per client on the server.* Simpler, but the
 right cap depends on the viewer's machine, not the server: a fixed 20–25 FPS
@@ -703,11 +708,8 @@ it.
 - **Everything in §14 holds for one clip per machine.** Camera capture was
   measured once, for the talk camera on the deployment machine (§8); several
   simultaneous clients and browser-side decoding are still unmeasured.
-- **The page over a network.** The frame pull (§7, §14.4) was measured on
-  localhost only. Over a LAN every frame also pays its transfer, about 9 ms
-  per 1.1 MB at 1 Gbit/s, serialised with decoding; the frame rate a remote
-  viewer gets, and whether pipelining the next request is then needed, is
-  unmeasured. So is Brave (Chromium-based, expected to behave like Chrome).
+- **Brave with the frame pull (§7).** Only Chrome and Firefox were measured
+  (§14.4). Brave is Chromium-based and expected to behave like Chrome.
 - **FP16.** `half=True` is not needed at nano scale on a 4090. If enabled at
   larger scales, note that `torch.quantile` does not accept `float16` on CUDA;
   `Scale.get` already casts with `.float()` for this reason.
