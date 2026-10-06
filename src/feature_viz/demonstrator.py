@@ -22,9 +22,10 @@ featuremap_render.py, yolo26_realtime_demo.py) with one code path.
 Core decisions:
   * One code path for GPU and CPU. The difference lies solely in a
     parameter set (the profile), never in diverging logic.
-  * Output defaults to an MJPEG stream in the browser rather than
-    cv2.imshow. That removes every dependency on X11/Wayland - relevant
-    for running this in a container later on.
+  * Output defaults to the browser rather than cv2.imshow. That removes
+    every dependency on X11/Wayland - relevant for running this in a
+    container later on. The page pulls one JPEG at a time, so every
+    browser gets only as many frames as it can draw (DECISIONS.md §7).
   * The webcam is the default source; SOURCE selects another camera or a
     video file. A source that cannot be opened stops the demonstrator
     before anything starts, with a message naming the sample clip.
@@ -73,6 +74,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Protocol, TypeAlias, cast
+from urllib.parse import parse_qs, urlsplit
 
 import cv2
 import numpy as np
@@ -621,7 +623,7 @@ PAGE: Final[str] = """<!doctype html>
   body {{ background:#111; color:#ddd; font-family:sans-serif;
          margin:0; padding:16px; }}
   h1 {{ font-size:16px; font-weight:normal; margin:0 0 12px; }}
-  img {{ max-width:100%; height:auto; display:block; }}
+  img, canvas {{ max-width:100%; height:auto; display:block; }}
   footer {{ font-size:12px; color:#888; margin-top:12px; }}
   footer a {{ color:#9bf; }}
   .funding {{ font-size:12px; color:#aaa; margin-top:16px; max-width:900px; }}
@@ -632,7 +634,39 @@ PAGE: Final[str] = """<!doctype html>
   .logos img {{ height:110px; width:auto; }}
 </style></head>
 <body><h1>YOLO26 &mdash; detection and feature maps &nbsp;|&nbsp; {info}</h1>
-<img src="/stream.mjpg" alt="Stream">
+<canvas id="stream" role="img" aria-label="Stream"></canvas>
+<noscript><img src="/stream.mjpg" alt="Stream"></noscript>
+<script>
+// Pull, not push (DECISIONS.md section 7): the next frame is requested only
+// once the previous one is drawn, so a browser that decodes slowly gets fewer
+// frames instead of a growing backlog. `after` makes the server hold the
+// request until a newer frame exists, so a fast browser does not spin.
+(async () => {{
+  const canvas = document.getElementById("stream");
+  const ctx = canvas.getContext("2d");
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  let seq = -1;
+  for (;;) {{
+    try {{
+      const resp = await fetch("/frame.jpg?after=" + seq, {{ cache: "no-store" }});
+      if (!resp.ok) {{
+        await pause(500);  // no frame yet: the model is still loading
+        continue;
+      }}
+      seq = Number(resp.headers.get("X-Frame-Seq"));
+      const frame = await createImageBitmap(await resp.blob());
+      if (canvas.width !== frame.width || canvas.height !== frame.height) {{
+        canvas.width = frame.width;
+        canvas.height = frame.height;
+      }}
+      ctx.drawImage(frame, 0, 0);
+      frame.close();
+    }} catch (err) {{
+      await pause(500);  // server restarting or network gone: keep trying
+    }}
+  }}
+}})();
+</script>
 <footer>feature-viz, Copyright &copy; 2026 Florian F&ouml;rster &mdash;
 licensed under the
 <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a> or later.
@@ -698,6 +732,9 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     buffer: ClassVar[FrameBuffer | None] = None
     info: ClassVar[str] = ""
+    # The page fetches every frame separately (/frame.jpg). Under the
+    # default HTTP/1.0 each of those would open a new TCP connection.
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, format: str, *args: Any) -> None:
         pass  # no request log on the console
@@ -722,6 +759,8 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         elif self.path == "/healthz":
             self._health()
+        elif urlsplit(self.path).path == "/frame.jpg":
+            self._frame()
         elif self.path == "/stream.mjpg":
             self._stream()
         elif self.path.removeprefix("/funding/") in _FUNDING_FILES:
@@ -757,12 +796,47 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _frame(self) -> None:
+        """The newest frame as a single JPEG; what the page uses. With
+        `after=<seq>` the request is held until a frame newer than `seq`
+        exists (at most FrameBuffer.wait's timeout), so a client that polls
+        in a loop never receives the same frame twice in a row while frames
+        keep coming. A server restart resets the counter; wait() compares for
+        inequality, so the stale `seq` of a reloaded server still returns
+        at once."""
+        if self.buffer is None:
+            self.send_error(503, "no frame source")
+            return
+        try:
+            after: int = int(parse_qs(urlsplit(self.path).query).get("after", ["-1"])[0])
+        except ValueError:
+            self.send_error(400, "after must be an integer")
+            return
+        jpeg: bytes | None
+        seq: int
+        jpeg, seq = self.buffer.wait(after)
+        if jpeg is None:
+            self.send_error(503, "no frame yet")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Seq", str(seq))
+        self.end_headers()
+        self.wfile.write(jpeg)
+
     def _stream(self) -> None:
+        """MJPEG for players (VLC, ffplay) and for the page without
+        JavaScript. Not what the page uses: Firefox cannot shed a push stream
+        it decodes too slowly and freezes (DECISIONS.md §7)."""
         if self.buffer is None:
             self.send_error(503, "no frame source")
             return
 
         self.send_response(200)
+        # The stream has no length and ends only when the client leaves.
+        self.send_header("Connection", "close")
         self.send_header("Cache-Control", "no-cache, private")
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=FRAME")
         self.end_headers()
