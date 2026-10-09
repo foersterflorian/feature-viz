@@ -695,10 +695,10 @@ on stop. Archive `feature-viz-0.2.0.tar.zst`: 3.3 GB, written in 17 s,
 the archive, outside the repository.
 
 **Version 0.2.1** (2026-10-09, commit `8ac2216`). Built on the deployment
-machine in 6.0 min, `demonstrator.py` identical to the repository's. The
-webcam variant was not run: no camera was attached. GPU + sample clip
-became healthy after 7 s, 42.8 FPS at a host client over 20 s, exit 0 on
-stop. Archive `feature-viz-0.2.1.tar.zst`: 3.3 GB, written in 17 s,
+machine in 6.0 min, `demonstrator.py` identical to the repository's. GPU +
+sample clip became healthy after 7 s, 42.8 FPS at a host client over 20 s,
+exit 0 on stop. Webcam variant via `start-container.sh`: `[info] camera:
+MJPG 1280x720 @ 30`, exit 0 on stop (frame rate not measured). Archive `feature-viz-0.2.1.tar.zst`: 3.3 GB, written in 17 s,
 `zstd -t` clean. Config digest `sha256:bf024fe7…`, manifest digest
 `sha256:c96394ff…`; full values and the file's SHA-256 next to the archive.
 
