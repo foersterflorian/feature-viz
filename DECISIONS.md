@@ -1401,3 +1401,30 @@ it reads 42.4 instead of 30.3.
 `tools/benchmark.py` keeps reporting the mean of per-frame rates alongside the
 mean loop time. On its video source the two agree (§14.3: 47.3 FPS against
 21.1 ms), so its figures stand; with a camera source, read the loop time.
+
+---
+
+## 21. Open tasks, carried over from teach-by-showing
+
+The two demonstrators stand side by side and are meant to read as a pair.
+Decided in the sibling repository `teach-by-showing` (its `DECISIONS.md`
+§2, §24) and to be followed here; recorded on 2026-10-22 at the
+maintainer's request so that they are not lost. None is built yet.
+
+- **Funding notice wording.** The project is called "KMI", without
+  hyphens, in both languages. The English notice is our translation of the
+  funder's German one and is written in British English ("Centres",
+  "Labour", "programme"); teach-by-showing's `funding.py` holds the exact
+  text. Here `FUNDING_TEXT` in `demonstrator.py` (drawn by
+  `funding_strip()` and shown on the page), the README and §17 still read
+  "K-M-I", "Centers", "Labor", "program". The German wording, verbatim from
+  the funder, is in the same file.
+- **Screen language German or English.** teach-by-showing switches its
+  visitors' texts with Ctrl+Alt+L, English by default, kept on its data
+  volume, the funding notice following the language (its §24). Whether and
+  how this applies here (title, caption strip, page) is to be decided.
+- **Light and dark mode.** teach-by-showing is getting a light mode beside
+  today's dark one, switched by the staff with Ctrl+Alt+H, dark by default
+  (decided 2026-10-22). This demonstrator shares the dark ground (#111);
+  it should get the same so that the pair still matches in either mode.
+  The funding strip's white panel stays white in both (§17).
