@@ -52,9 +52,11 @@ def test_both_themes_name_the_same_colours() -> None:
 
 @pytest.mark.parametrize("theme", list(demo.Theme))
 def test_text_reads_on_its_ground(theme: demo.Theme) -> None:
-    """WCAG: text at least 4.5:1 against its ground, in both sets."""
+    """WCAG: text at least 4.5:1 against its ground, in both sets - the
+    muted legend included."""
     t: dict[str, str] = tokens(theme)
-    assert contrast(t["--fg"], t["--bg"]) >= 4.5
+    for name in ("--fg", "--muted"):
+        assert contrast(t[name], t["--bg"]) >= 4.5, name
 
 
 def test_the_page_takes_its_colours_from_the_tokens() -> None:
@@ -88,3 +90,16 @@ def test_the_page_switches_the_theme_without_a_reload() -> None:
     assert 'choose("theme"' in branch and "root.dataset.theme = theme" in branch
     assert "reload" not in branch
     assert 'data-dark="Dark"' in page() and 'data-light="Light"' in page()
+
+
+def test_the_type_matches_teach_by_showing() -> None:
+    """The same face and the same headline and hint sizes as the crane's
+    screen beside it on the stand; the legend is set like its hint."""
+    styles: str = page().split("<style>", 1)[1].split("</style>", 1)[0]
+    assert "font-family:system-ui, sans-serif" in styles
+    assert "--text-headline:3.2vh" in styles and "--text-hint:2.4vh" in styles
+    h1 = re.search(r"\n  h1 \{([^}]*)\}", styles)
+    legend = re.search(r"\n  \.legend \{([^}]*)\}", styles)
+    assert h1 is not None and legend is not None
+    assert "var(--text-headline)" in h1.group(1) and "font-weight:600" in h1.group(1)
+    assert "var(--text-hint)" in legend.group(1) and "color:var(--muted)" in legend.group(1)
