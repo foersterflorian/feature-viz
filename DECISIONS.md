@@ -630,6 +630,20 @@ variants were run end to end, each delivering frames to the host.
   until the first frame and whenever frames stop. 60 s start period for model
   loading on the CPU profile. Docker only *reports* an unhealthy container; it
   does not restart one.
+- *`restart: unless-stopped`* (since 2026-10-27), as teach-by-showing beside
+  it on the stand (its §10, §26): started once with `docker compose up -d`,
+  the container comes back at every boot and whenever the demonstrator
+  exits, so the stand's kiosk (teach-by-showing's `tools/stand.py`) finds it
+  without anyone starting it by hand. A container stopped by hand — `docker
+  compose stop`, or Ctrl+C on `start-container.sh`, which runs in the
+  foreground — stays stopped, at the next boot too; for the stand it is
+  therefore started detached. A source that cannot be opened (§8) now
+  restarts under Docker's growing back-off instead of staying down, so a
+  camera plugged in late is picked up. *Checked* (deployment machine,
+  image 0.3.0, sample clip): the demonstrator ended from inside the
+  container was running again, restart count 1, and healthy within about
+  4 s; after `docker compose stop` it stayed exited. The return at boot
+  was not checked (§10).
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
@@ -756,6 +770,9 @@ it.
   teach-by-showing, where they only reach the kiosk that has the focus.
   teach-by-showing confirmed both combinations free under COSMIC and in
   Firefox (its §24, §25).
+- **feature-viz back after a reboot.** `restart: unless-stopped` (§9) was
+  checked for a demonstrator that exits, not for a reboot of the machine.
+  Docker documents both; to be seen at the first cold start of the stand.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
