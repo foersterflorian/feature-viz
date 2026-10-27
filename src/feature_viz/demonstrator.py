@@ -165,6 +165,10 @@ class Config:
     display_mode: str = "mjpeg"  # "mjpeg" or "window"
     port: int = 8080
     jpeg_quality: int = 80
+    # The funding strip along the bottom of the canvas (DECISIONS.md §17).
+    # Only the window has no page around it; in the browser the page's footer
+    # carries the notice. Set from display_mode in build_config().
+    funding_on_canvas: bool = False
 
     # Derived, not a constructor argument: see __post_init__.
     gamma_lut: NDArray[np.uint8] = field(init=False, repr=False)
@@ -194,6 +198,7 @@ def build_config() -> Config:
 
     cfg.weights = os.getenv("WEIGHTS", cfg.weights)
     cfg.display_mode = os.getenv("DISPLAY_MODE", cfg.display_mode)
+    cfg.funding_on_canvas = cfg.display_mode == "window"
     cfg.port = int(os.getenv("PORT", str(cfg.port)))
     cfg.source = os.getenv("SOURCE", "") or cfg.source
     return cfg
@@ -585,9 +590,12 @@ def funding_strip(width: int) -> BGRImage:
     return strip
 
 
-def compose(frame: BGRImage, grid: BGRImage, fps: float, info: str) -> BGRImage:
-    """Detection image and feature-map grid side by side, funding strip
-    underneath."""
+def compose(
+    frame: BGRImage, grid: BGRImage, fps: float, info: str, *, funding_on_canvas: bool
+) -> BGRImage:
+    """Detection image and feature-map grid side by side, and the funding
+    strip underneath where no page carries the notice (§17). Keyword-only
+    and without a default, so that no caller drops the notice by accident."""
 
     def fit(img: BGRImage, height: int) -> BGRImage:
         s: float = height / img.shape[0]
@@ -606,6 +614,8 @@ def compose(frame: BGRImage, grid: BGRImage, fps: float, info: str) -> BGRImage:
         BGRImage,
         np.hstack([caption(fit(frame, target_h - bar), lines), fit(grid, target_h)]),
     )
+    if not funding_on_canvas:
+        return body
     return cast(BGRImage, np.vstack([body, funding_strip(body.shape[1])]))
 
 
@@ -621,24 +631,41 @@ SOURCE_URL: Final[str] = "https://github.com/foersterflorian/feature-viz"
 # version, not at the upstream repository.
 PAGE: Final[str] = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YOLO26 feature-map demonstrator</title>
 <style>
+  /* One screen, no scrolling (DECISIONS.md §17): title on top, the canvas
+     shrunk to the space left, the footer along the bottom. Sizes in vh so
+     that the kiosk's 4K monitor and a laptop show the same proportions;
+     max() keeps the small print readable in a short window. */
+  html, body {{ height:100%; margin:0; }}
   body {{ background:#111; color:#ddd; font-family:sans-serif;
-         margin:0; padding:16px; }}
-  h1 {{ font-size:16px; font-weight:normal; margin:0 0 12px; }}
-  img, canvas {{ max-width:100%; height:auto; display:block; }}
-  footer {{ font-size:12px; color:#888; margin-top:12px; }}
-  footer a {{ color:#9bf; }}
-  .funding {{ font-size:12px; color:#aaa; margin-top:16px; max-width:900px; }}
-  .funding a {{ color:#9bf; }}
-  /* The BMFTR logo must sit on a white ground; the page is dark. */
-  .logos {{ display:inline-flex; gap:16px; background:#fff; padding:8px;
-           margin-top:8px; }}
-  .logos img {{ height:110px; width:auto; }}
+         display:flex; flex-direction:column; }}
+  h1 {{ font-size:max(16px, 2vh); font-weight:normal; margin:0;
+       padding:1.2vh 1.5vw; }}
+  main {{ flex:1; min-height:0; display:flex; align-items:center;
+         justify-content:center; padding:0 1.5vw 1.2vh; }}
+  /* Both limits on a replaced element keep its aspect ratio. */
+  main canvas, main img {{ max-width:100%; max-height:100%; display:block; }}
+  /* White, because the BMFTR logo must sit on a white ground (§17). */
+  footer {{ display:flex; align-items:center; gap:2vw; padding:0.8vh 2.5vw;
+           background:#fff; color:#333; font-size:max(12px, 1.15vh);
+           line-height:1.35; }}
+  footer p {{ margin:0; }}
+  footer a {{ color:#1d4ed8; }}
+  .funding {{ flex:1; display:flex; align-items:center; gap:2vw; }}
+  .funding img {{ height:max(80px, 7vh); width:auto; }}
+  /* Licence and pipeline, set off from the funding notice: a rule, a
+     narrower column, smaller and greyer type. */
+  .about {{ max-width:24vw; padding-left:2vw; border-left:1px solid #ccc;
+           color:#555; font-size:max(11px, 1vh); }}
+  .about p + p {{ margin-top:0.5vh; }}
 </style></head>
-<body><h1>YOLO26 &mdash; detection and feature maps &nbsp;|&nbsp; {info}</h1>
+<body><h1>YOLO26 &mdash; detection and feature maps</h1>
+<main>
 <canvas id="stream" role="img" aria-label="Stream"></canvas>
 <noscript><img src="/stream.mjpg" alt="Stream"></noscript>
+</main>
 <script>
 // Pull, not push (DECISIONS.md section 7): the next frame is requested only
 // once the previous one is drawn, so a browser that decodes slowly gets fewer
@@ -670,14 +697,18 @@ PAGE: Final[str] = """<!doctype html>
   }}
 }})();
 </script>
-<footer>feature-viz, Copyright &copy; 2026 Florian F&ouml;rster &mdash;
-licensed under the
-<a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a> or later.
-Source: <a href="{source}">{source}</a>.
-Uses Ultralytics YOLO, also AGPL-3.0.</footer>
-<section class="funding"><p>{funding_text}
-More on the project: <a href="{funding_url}">{funding_url}</a></p>
-<div class="logos">{funding_logos}</div></section>
+<footer>
+<section class="funding">{funding_logos}
+<p>{funding_text} More on the project:
+<a href="{funding_url}">{funding_url}</a></p></section>
+<section class="about">
+<p>feature-viz, Copyright &copy; 2026 Florian F&ouml;rster &mdash; licensed
+under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a>
+or later. Uses Ultralytics YOLO, also AGPL-3.0.</p>
+<p>Source: <a href="{source}">{source}</a></p>
+<p>{info}</p>
+</section>
+</footer>
 </body></html>
 """
 
@@ -1068,7 +1099,9 @@ def main() -> None:
             n += 1
 
             fps: float = rate.tick(time.perf_counter())
-            canvas: BGRImage = compose(result.plot(), grid, fps, info)
+            canvas: BGRImage = compose(
+                result.plot(), grid, fps, info, funding_on_canvas=cfg.funding_on_canvas
+            )
 
             if buffer is not None:
                 ok, encoded = cv2.imencode(

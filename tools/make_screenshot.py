@@ -86,7 +86,8 @@ def main() -> int:
 
             fps: float = rate.tick(time.perf_counter())
 
-            canvas: BGRImage = compose(result.plot(), grid, fps, info)
+            # Stills always carry the notice: they travel without the page (§17).
+            canvas: BGRImage = compose(result.plot(), grid, fps, info, funding_on_canvas=True)
             # Kept for its cost, not its output - see the module docstring.
             cv2.imencode(".jpg", canvas, [int(cv2.IMWRITE_JPEG_QUALITY), cfg.jpeg_quality])
 

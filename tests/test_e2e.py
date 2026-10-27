@@ -146,17 +146,17 @@ def test_real_checkpoint_has_the_documented_targets(gpu_cfg: demo.Config) -> Non
 def test_sample_clip_streams_and_stops_cleanly(
     tmp_path: Path, stopper: list[subprocess.Popen[str]]
 ) -> None:
-    """Start to finish: the stream delivers a decodable canvas with the
-    funding strip at the bottom, and SIGTERM ends the run with exit code 0.
+    """Start to finish: the stream delivers a decodable canvas without the
+    funding strip, and SIGTERM ends the run with exit code 0.
     (The clip loops, so it never ends by itself - see the next test.)"""
     proc, url = start(tmp_path, stopper, SOURCE=str(SAMPLE))
 
     jpeg: bytes = frames(url, 1, timeout=30)[0]
     canvas = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
     assert canvas is not None and canvas.ndim == 3
-    # §17: the right end of the strip is white ground (JPEG, hence not 255).
-    strip_h: int = demo.funding_strip(canvas.shape[1]).shape[0]
-    assert canvas[-strip_h:, -20:].mean() > 245
+    # §17: in the browser the page's footer carries the notice. The strip
+    # would end the canvas in rows of white ground; image and tiles never do.
+    assert canvas[-20:].mean() < 200
 
     out: str = stop(proc)
     assert proc.returncode == 0, out

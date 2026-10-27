@@ -13,7 +13,7 @@ a video is used deliberately, since a webcam would measure its own 30 Hz.
     python tools/benchmark.py                   # GPU profile if available
     FORCE_CPU=1 python tools/benchmark.py       # reduced profile
     python tools/benchmark.py --runs 3          # repeat to see the spread
-    python tools/benchmark.py --no-funding-strip   # the §14.2 comparison
+    DISPLAY_MODE=window python tools/benchmark.py  # with the §17 strip
 
 Paste the output into §14 together with the machine line it prints.
 """
@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import cast
 
 import cv2
-import numpy as np
 import torch
 
 # YOLO comes through the demonstrator, never from `import ultralytics` up
@@ -80,7 +79,9 @@ def run(cfg: demo.Config, warmup: int) -> tuple[list[float], tuple[int, int]]:
                 renderer.calibrate()
             if n % cfg.vis_every == 0 or grid is None:
                 grid = renderer.render()
-            canvas = demo.compose(result.plot(), grid, 30.0, info)
+            canvas = demo.compose(
+                result.plot(), grid, 30.0, info, funding_on_canvas=cfg.funding_on_canvas
+            )
             cv2.imencode(".jpg", canvas, [int(cv2.IMWRITE_JPEG_QUALITY), cfg.jpeg_quality])
             now: float = time.perf_counter()
             if n >= warmup:
@@ -99,11 +100,6 @@ def main() -> int:
     )
     parser.add_argument("--runs", type=int, default=1, help="passes over the source")
     parser.add_argument("--warmup", type=int, default=60, help="frames discarded per pass")
-    parser.add_argument(
-        "--no-funding-strip",
-        action="store_true",
-        help="measure without the §17 strip, for comparison only",
-    )
     args: argparse.Namespace = parser.parse_args()
 
     cfg: demo.Config = demo.build_config()
@@ -112,9 +108,6 @@ def main() -> int:
     if not Path(cfg.source).exists() and not cfg.source.isdigit():
         print(f"[error] source not found: {cfg.source}", file=sys.stderr)
         return 1
-    if args.no_funding_strip:
-        # Comparison only: a zero-height strip leaves compose() untouched.
-        demo.funding_strip = lambda width: np.zeros((0, width, 3), dtype=np.uint8)  # type: ignore[assignment]
 
     print(f"[info] {machine()}")
     print(f"[info] {cfg.weights} | {cfg.device} | {cfg.imgsz}px | layers {cfg.targets}")

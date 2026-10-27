@@ -101,14 +101,16 @@ def test_compose_does_not_grow_the_canvas_for_the_caption() -> None:
     grid: demo.BGRImage = np.random.default_rng(0).integers(
         0, 256, (900, 1500, 3), dtype=np.uint8
     )
-    canvas: demo.BGRImage = demo.compose(frame, grid, 30.0, "info")
+    canvas: demo.BGRImage = demo.compose(frame, grid, 30.0, "info", funding_on_canvas=True)
     strip_h: int = demo.funding_strip(canvas.shape[1]).shape[0]
     assert canvas.shape[0] == grid.shape[0] + strip_h
     assert np.array_equal(canvas[: grid.shape[0], -grid.shape[1] :], grid)
 
 
 def test_compose_puts_the_funding_strip_at_the_bottom() -> None:
-    """§17: the notice is part of every canvas."""
-    canvas: demo.BGRImage = demo.compose(bgr(360, 640), bgr(400, 800), 30.0, "info")
+    """§17: where no page carries the notice, the canvas does."""
+    canvas: demo.BGRImage = demo.compose(
+        bgr(360, 640), bgr(400, 800), 30.0, "info", funding_on_canvas=True
+    )
     strip: demo.BGRImage = demo.funding_strip(canvas.shape[1])
     assert np.array_equal(canvas[-strip.shape[0] :], strip)
