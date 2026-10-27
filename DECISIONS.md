@@ -771,6 +771,21 @@ host client over 20 s. Both exit 0 on stop. Archive
 Config digest `sha256:82e08386…`, manifest digest `sha256:aa52e057…`; full
 values and the file's SHA-256 next to the archive.
 
+**Version 0.3.1** (2026-10-27, commit `cd0a65e`). The legend under the
+title and the type matched to teach-by-showing (§22, §23) change what the
+page looks like against the 0.3.0 archive. Built on the deployment machine
+in 8.8 min, `demonstrator.py` identical to the repository's. GPU + sample
+clip became healthy 2.5 s after `up -d` returned, 46.6 FPS at a host client
+over 20 s; the page carried the legend and `system-ui`, and kept the
+language and theme stored on the volume (German, light) — no switch was
+posted, so as not to change the stand's choice; not reachable at the
+machine's network address; exit 0 on stop. Webcam variant started as on
+the stand with `docker compose up -d`: healthy after 4.1 s, `[info] camera:
+MJPG 1280x720 @ 30`, 28.7 FPS at a host client over 20 s, left running.
+Archive `feature-viz-0.3.1.tar.zst`: 3.3 GB, written in 17 s, `zstd -t`
+clean. Config digest `sha256:99456e8c…`, manifest digest
+`sha256:cab0ff22…`; full values and the file's SHA-256 next to the archive.
+
 **Known limitation.** Docker does not abstract the GPU. A target machine still
 needs an NVIDIA card, a driver ≥ 580 and the container toolkit — or it runs the
 CPU variant.
