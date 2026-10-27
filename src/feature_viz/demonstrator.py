@@ -844,7 +844,10 @@ PAGE: Final[str] = """<!doctype html>
   .legend {{ padding:0 1.5vw 1.2vh; font-size:max(13px, 1.5vh);
             line-height:1.4; max-width:120ch; }}
   .legend p {{ margin:0; }}
-  .legend p + p {{ margin-top:0.4vh; }}
+  /* Three lines held for the explanation, which the German fills at the
+     stand's size and the English does not: the canvas then keeps its
+     place when the staff switch the language, as in teach-by-showing. */
+  .legend p + p {{ margin-top:0.4vh; min-height:calc(3 * 1.4em); }}
   /* The staff's confirmation after a switch, on a box of the ground's
      colour so that it reads over the canvas too. */
   #notice {{ position:fixed; top:8vh; left:50%; transform:translateX(-50%);
