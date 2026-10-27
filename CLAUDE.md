@@ -46,6 +46,7 @@ FORCE_CPU=1 feature-viz                  # exercise the reduced profile on a GPU
 DISPLAY_MODE=window feature-viz
 SOURCE=assets/sample.mp4 feature-viz     # sample clip; webcam is the default
 WEIGHTS=/abs/path/yolo26n.pt feature-viz
+DATA_DIR=/tmp/fv feature-viz             # where Ctrl+Alt+L / Ctrl+Alt+H choices are kept
 
 ./start-container.sh                     # container: GPU + webcam, checks .env/image/camera first
 docker compose up --build                # container: GPU + webcam (DECISIONS.md §9)

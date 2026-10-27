@@ -618,6 +618,14 @@ variants were run end to end, each delivering frames to the host.
   from root.
 - *`ipc: host`*, otherwise PyTorch can stall on Docker's 64 MB default shared
   memory.
+- *A volume at `/data`* (`DATA_DIR`) keeps the staff's language and theme
+  across restarts and rebuilds (§22, §23). It is the only state the
+  container writes; the directory is created for the unprivileged user in
+  the image, and a fresh volume inherits that ownership.
+- *Host port bound to `127.0.0.1`* (since 2026-10-27). The page is viewed on
+  the machine itself (§7), and the staff's switch is a `POST` (§22) that
+  nobody else on a venue's network should reach. `HOST_PORT` still picks the
+  port.
 - *Health check on `/healthz`*, which reports frame freshness (§7): 503
   until the first frame and whenever frames stop. 60 s start period for model
   loading on the CPU profile. Docker only *reports* an unhealthy container; it
@@ -726,6 +734,12 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
+- **The staff's keys in the feature-viz kiosk on the stand.** Ctrl+Alt+L
+  and Ctrl+Alt+H were pressed in the desktop app's browser and confirmed in
+  the container (§22, §23), not yet in the Firefox kiosk beside
+  teach-by-showing, where they only reach the kiosk that has the focus.
+  teach-by-showing confirmed both combinations free under COSMIC and in
+  Firefox (its §24, §25).
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -761,7 +775,8 @@ hand-written on `http.server`. That is the right trade for one endpoint serving
 bytes: no extra dependency, nothing to break in five years.
 
 The threshold for switching to FastAPI is **the second endpoint with a request
-body** — at that point manual `Content-Length` parsing, validation and error
+body**. The staff's switch (`POST /choice`, §22) takes its value in the query
+and refuses a body, so it does not count — at that point manual `Content-Length` parsing, validation and error
 responses stop being worth writing by hand, and the generated OpenAPI page at
 `/docs` becomes a real asset for handover: a successor can see what is
 adjustable without reading the code.
@@ -1294,9 +1309,9 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19, §20 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py`, `test_theme.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19, §20, §23 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
-| HTTP | `test_server.py` | nothing | §7, §16, §17 |
+| HTTP | `test_server.py`, `test_texts.py` | nothing | §7, §16, §17, §22 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |
 
 Everything except the `weights` tests — 97 tests — runs in about 8.5 s (7.7 s
@@ -1479,13 +1494,140 @@ maintainer's request so that they are not lost.
   English ("Centres", "Labour", "programme"); teach-by-showing's
   `funding.py` holds the exact text, which `FUNDING_TEXT` and the README
   now match. The German wording, verbatim from the funder, is in the same
-  file and arrives here with the screen language.
-- **Screen language German or English.** teach-by-showing switches its
-  visitors' texts with Ctrl+Alt+L, English by default, kept on its data
-  volume, the funding notice following the language (its §24). Whether and
-  how this applies here (title, caption strip, page) is to be decided.
-- **Light and dark mode.** teach-by-showing is getting a light mode beside
-  today's dark one, switched by the staff with Ctrl+Alt+H, dark by default
-  (decided 2026-10-22). This demonstrator shares the dark ground (#111);
-  it should get the same so that the pair still matches in either mode.
-  The funding strip's white panel stays white in both (§17).
+  file and is shown on the German page (§22).
+- **Screen language German or English** — *done on 2026-10-27, see §22.*
+  teach-by-showing switches its visitors' texts with Ctrl+Alt+L, English
+  by default, kept on its data volume, the funding notice following the
+  language (its §24).
+- **Light and dark mode** — *done on 2026-10-27, see §23.*
+  teach-by-showing is getting a light mode beside today's dark one,
+  switched by the staff with Ctrl+Alt+H, dark by default (decided
+  2026-10-22). The funding footer's white stays white in both (§17).
+- **An explanatory text for visitors** — *open, deferred on 2026-10-27.*
+  The page says what it shows only in its title. A short text on what a
+  feature map is and how to read the tiles was proposed while the screen
+  language was decided and set aside by the maintainer for later. It
+  would join the catalogue of §22 in both languages.
+
+---
+
+## 22. The page in German or English: one catalogue, the staff's key, kept on disk
+
+**Context.** teach-by-showing, which stands beside this demonstrator on the
+stand, lets the staff switch its screen between German and English (its
+§24); this demonstrator followed (§21). Decided with the maintainer on
+2026-10-27.
+
+**Decision.**
+
+- *The page, not the canvas.* Title, footer and the staff's confirmation
+  are translated; the canvas is not. Its words are FPS, the pipeline line,
+  the layer labels and the detector's class names — technical, the same in
+  both languages, and drawn into the image, where they cannot follow a
+  switch.
+- *Two languages, English by default,* German and English in British
+  spelling, as in teach-by-showing.
+- *One catalogue in `demonstrator.py`:* a frozen dataclass `Texts`, one
+  instance per language (`ENGLISH`, `GERMAN`), so that a text missing in
+  one of them is an error at import. `FUNDING_TEXT` holds the funder's
+  German wording beside our English one (§17); the window's canvas strip
+  keeps the English. The page escapes every text; the licence sentence
+  carries the placeholder for its link.
+- *The staff switch with Ctrl+Alt+L,* once per press, in the page itself.
+  The page posts the other language to `/choice?language=de|en` and
+  reloads; the server fills in the next page in it and sends it with
+  `Cache-Control: no-store`. A mark in `sessionStorage` lets the reloaded
+  page confirm the switch for 3 s in its own words ("Deutsch",
+  "English"); with storage blocked, the reload alone shows it.
+- *Kept on disk:* `language.json` in `DATA_DIR` (default `./data`, in the
+  container the volume at `/data`, §9), written whole and then renamed. A
+  missing or unreadable file means English; a file that cannot be written
+  leaves the choice in effect until the next restart. `Choices` holds it
+  under a lock and knows nothing about HTTP.
+- *One endpoint without a body.* `POST /choice` takes exactly one of
+  `language=de|en` or `theme=dark|light` in the query; anything else is
+  400, a body too. That stays below §12's threshold for a web framework.
+
+**Why.**
+
+- *Each demonstrator its own key (decided 2026-10-27).* On the stand two
+  Firefox kiosks run side by side, and a key reaches only the one that has
+  the focus. The staff click into this one and press the same keys as in
+  teach-by-showing. Coupling the two — this page following the crane's
+  choice — was rejected: the demonstrator must also run on its own, at a
+  talk or on another machine, without depending on the other.
+- *A reload rather than replacing words in place:* the server words the
+  page, the script words nothing, as in teach-by-showing; and a switch
+  happens between visitors.
+- *Kept by the server, not by the browser:* the kiosk starts with a fresh
+  profile every time (teach-by-showing §11).
+- *Other open pages* follow at their next reload. The page is viewed on the
+  machine itself (§7); a second viewer is not a case on the stand.
+
+**Rejected alternatives.**
+
+- *Translating the canvas:* its words are technical, and a German caption
+  strip would need a second rendering path or a restart.
+- *Following teach-by-showing's choice:* see Why.
+- *gettext or a JSON catalogue:* a toolchain or a second format for a dozen
+  texts.
+- *Translating the funding notice ourselves:* the German wording must come
+  from the funder.
+
+**Checked** (deployment machine, 2026-10-27, the desktop app's browser at
+2816 × 1584 CSS pixels, the stand monitor's size, sample clip): Ctrl+Alt+L
+reloaded the page in German with "Deutsch" confirmed, the theme kept; after
+a restart of the demonstrator the page came in German again; no scrolling
+in either language. In a container built from this commit, with a volume at
+`/data`: the files belong to the container's user, and after a restart of
+the container the page came in the stored language and theme. The Firefox
+kiosk on the stand is still to be checked (§10).
+
+`tests/test_texts.py` guards this section: the funder's German wording,
+every text in both languages, the page in each language, English by
+default and kept across a restart, the fallback for an unreadable file,
+the file written whole, a choice that cannot be written still taking
+effect, the switch kept and the next page following, everything but one
+known choice refused, and the reload on Ctrl+Alt+L.
+
+---
+
+## 23. Dark and light: tokens for the page, the canvas as it is
+
+**Context.** teach-by-showing got a light theme beside its dark one,
+switched by the staff with Ctrl+Alt+H (its §25), and asked this
+demonstrator to follow so that the pair matches in either (§21). Decided
+with the maintainer on 2026-10-27.
+
+**Decision.**
+
+- *Every colour of the page a token:* `--bg`, `--fg` and `--footer-edge`
+  on `:root` (dark, as before: #111 and #ddd) and again under
+  `:root[data-theme="light"]` with teach-by-showing's light ground
+  (#f4f4f2), text (#1a1a1a) and the thin line (#c8c8c4) that sets the
+  white footer off the off-white ground.
+- *The canvas stays dark in both,* caption strips and gaps included. It is
+  image content, like a photograph on the page; following the theme would
+  mean the server rendering per theme.
+- *The footer stays white in both,* for the BMFTR logo (§17).
+- *Dark by default,* switched with Ctrl+Alt+H, once per press, kept in
+  `theme.json` beside the language (§22). The page posts the other theme
+  and only sets `data-theme`, without a reload, so the picture keeps
+  running; the confirmation names the theme in the page's language
+  ("Hell"/"Dunkel", "Light"/"Dark") for 3 s, on a box of the ground's
+  colour so that it reads over the canvas too.
+
+**Why.** As in teach-by-showing: the staff decide, not the desktop's
+`prefers-color-scheme`, which the kiosk's fresh profile follows for no one;
+kept by the server, since browser storage starts empty in every kiosk.
+
+**Checked** (with §22, same setup): Ctrl+Alt+H switched ground and title
+at once while frames kept arriving, confirmed with "Light" and later
+"Dunkel"; the confirmation hid after 3 s; the light theme survived a
+restart. Text against its ground: 13.9:1 dark, 15.8:1 light (WCAG,
+computed from the tokens).
+
+`tests/test_theme.py` guards this section: the same tokens in both sets,
+text at least 4.5:1 on its ground in both, ground and text taken from the
+tokens and the footer white, the page in the stored theme, dark by default
+and kept across a restart, and the switch without a reload.

@@ -13,6 +13,20 @@ SOURCE=assets/sample.mp4 pdm run feature-viz   # no camera: the sample clip
 `DECISIONS.md` records why the code is shaped the way it is, including the
 alternatives that were rejected. Read it before changing anything structural.
 
+## Keyboard shortcuts
+
+On the web page, for the staff (click into the page first; on a stand with
+two kiosks the keys reach only the one that has the focus):
+
+| Keys | Effect |
+|---|---|
+| Ctrl+Alt+L | page in German or English (English by default); the page reloads |
+| Ctrl+Alt+H | page dark or light (dark by default); the picture keeps running |
+
+The choice is kept in `DATA_DIR` (default `./data`; in the container a volume
+at `/data`) and survives a restart (`DECISIONS.md` §22, §23). The picture
+itself stays the same in every language and theme.
+
 ## Container
 
 The image runs exactly the versions in `pdm.lock`, with the weights built in,
