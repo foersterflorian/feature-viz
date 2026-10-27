@@ -534,6 +534,11 @@ class Texts:
     funding_more: str
     licence: str
     source: str
+    # Under the title, for a visitor the staff have not reached yet: what is
+    # where, and how to read a tile (DECISIONS.md §22). It names the corners
+    # of the GPU profile's grid, the one shown on the stand.
+    legend: str
+    explanation: str
     # The confirmation the staff see after a switch, each in its own words.
     language_name: str
     dark: str
@@ -549,6 +554,16 @@ ENGLISH: Final[Texts] = Texts(
         "{licence} or later. Uses Ultralytics YOLO, also AGPL-3.0."
     ),
     source="Source:",
+    legend=(
+        "Left: what the network recognises. Right: what individual layers of the "
+        "network ‘see’ in the process."
+    ),
+    explanation=(
+        "Each tile shows a trained pattern detector: the lighter a spot is, the more "
+        "strongly the detector has triggered there. In the top left, the detectors "
+        "respond to simple edges and contrasts; in the bottom right, to larger shapes "
+        "– from which the network ultimately constructs a ‘person’ or ‘car’."
+    ),
     language_name="English",
     dark="Dark",
     light="Light",
@@ -562,6 +577,17 @@ GERMAN: Final[Texts] = Texts(
         "{licence} oder später. Verwendet Ultralytics YOLO, ebenfalls AGPL-3.0."
     ),
     source="Quellcode:",
+    legend=(
+        "Links: Was das Netz erkennt. Rechts: Was einzelne Schichten des Netzes dabei "
+        "„sehen“."
+    ),
+    explanation=(
+        "Jede Kachel zeigt einen trainierten Musterdetektor: Je heller eine Stelle ist, "
+        "desto stärker hat der Detektor an dieser Stelle angesprochen. Oben links "
+        "reagieren die Detektoren auf einfache Kanten und Kontraste; unten rechts auf "
+        "größere Formen – aus denen das Netz schließlich eine „Person“ oder ein „Auto“ "
+        "zusammensetzt."
+    ),
     language_name="Deutsch",
     dark="Dunkel",
     light="Hell",
@@ -813,6 +839,12 @@ PAGE: Final[str] = """<!doctype html>
   .about {{ max-width:24vw; padding-left:2vw; border-left:1px solid #ccc;
            color:#555; font-size:max(11px, 1vh); }}
   .about p + p {{ margin-top:0.5vh; }}
+  /* What is where and how to read a tile (§22): below the title, in the
+     space the width-limited canvas leaves free on the stand's monitor. */
+  .legend {{ padding:0 1.5vw 1.2vh; font-size:max(13px, 1.5vh);
+            line-height:1.4; max-width:120ch; }}
+  .legend p {{ margin:0; }}
+  .legend p + p {{ margin-top:0.4vh; }}
   /* The staff's confirmation after a switch, on a box of the ground's
      colour so that it reads over the canvas too. */
   #notice {{ position:fixed; top:8vh; left:50%; transform:translateX(-50%);
@@ -821,6 +853,8 @@ PAGE: Final[str] = """<!doctype html>
             font-weight:600; }}
 </style></head>
 <body><h1>{headline}</h1>
+<div class="legend"><p>{legend}</p>
+<p>{explanation}</p></div>
 <p id="notice" hidden data-language="{language_name}" data-dark="{dark}"
    data-light="{light}"></p>
 <main>
@@ -935,6 +969,8 @@ def page(language: Language, theme: Theme, info: str) -> str:
         theme=theme,
         page_title=html.escape(texts.page_title),
         headline=html.escape(texts.headline),
+        legend=html.escape(texts.legend),
+        explanation=html.escape(texts.explanation),
         language_name=html.escape(texts.language_name),
         dark=html.escape(texts.dark),
         light=html.escape(texts.light),
