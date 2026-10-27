@@ -1160,11 +1160,12 @@ conveyed by this repository.
 
 ## 17. Funding notice: on the canvas and on the page
 
-**Context.** The demonstrator comes out of the K-M-I project, funded by the
+**Context.** The demonstrator comes out of the KMI project, funded by the
 BMFTR within the ReKodA initiative. The funding terms ask for an
-acknowledgement with the funder's logo wherever project results are shown. The
-wording and both logos are taken verbatim from the project's sibling repository
-`pyforcesim` (README, `img/`); the image files are byte-identical copies.
+acknowledgement with the funder's logo wherever project results are shown.
+Both logos are taken from the project's sibling repository `pyforcesim`
+(`img/`); the image files are byte-identical copies. The English wording is
+teach-by-showing's (its `funding.py`, §2), see below.
 
 **Decision.** The notice appears in three places: the `README.md`, the footer
 of the served web page (text, project link, logos on a white panel), and a
@@ -1199,7 +1200,17 @@ readable size is not one of them.
   them. The page serves them from `/funding/<name>`, restricted to the names in
   `FUNDING_LOGOS`.
 - *Verbatim text, one wording everywhere.* `FUNDING_TEXT` matches the README
-  character for character, typographic quotes and dash included. That relies
+  character for character, typographic quotes and dash included.
+- *The same wording as teach-by-showing.* The English notice is our
+  translation of the funder's German one, in British English ("Centres",
+  "Labour", "programme"), and names the project "KMI" without hyphens, as
+  the German does. It was settled in teach-by-showing (its §2, decided with
+  the maintainer on 2026-10-22) and copied from its `funding.py` character
+  for character on 2026-10-27, so that the two demonstrators on the stand
+  read as a pair. It replaced the wording taken from `pyforcesim`
+  ("K-M-I", "Centers", "Labor", "program"). A change to the notice is
+  made in both repositories.
+- *Unicode on the canvas.* The typographic quotes and dash rely
   on OpenCV ≥ 5, whose `putText` renders Unicode (checked with 5.0.0); the
   Hershey fonts of OpenCV 4 would print `?` instead. `pyproject.toml` already
   requires 5.x.
@@ -1409,16 +1420,15 @@ mean loop time. On its video source the two agree (§14.3: 47.3 FPS against
 The two demonstrators stand side by side and are meant to read as a pair.
 Decided in the sibling repository `teach-by-showing` (its `DECISIONS.md`
 §2, §24) and to be followed here; recorded on 2026-10-22 at the
-maintainer's request so that they are not lost. None is built yet.
+maintainer's request so that they are not lost.
 
-- **Funding notice wording.** The project is called "KMI", without
-  hyphens, in both languages. The English notice is our translation of the
-  funder's German one and is written in British English ("Centres",
-  "Labour", "programme"); teach-by-showing's `funding.py` holds the exact
-  text. Here `FUNDING_TEXT` in `demonstrator.py` (drawn by
-  `funding_strip()` and shown on the page), the README and §17 still read
-  "K-M-I", "Centers", "Labor", "program". The German wording, verbatim from
-  the funder, is in the same file.
+- **Funding notice wording** — *done on 2026-10-27, see §17.* The project
+  is called "KMI", without hyphens, in both languages. The English notice
+  is our translation of the funder's German one and is written in British
+  English ("Centres", "Labour", "programme"); teach-by-showing's
+  `funding.py` holds the exact text, which `FUNDING_TEXT` and the README
+  now match. The German wording, verbatim from the funder, is in the same
+  file and arrives here with the screen language.
 - **Screen language German or English.** teach-by-showing switches its
   visitors' texts with Ctrl+Alt+L, English by default, kept on its data
   volume, the funding notice following the language (its §24). Whether and
