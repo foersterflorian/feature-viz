@@ -47,8 +47,10 @@ The [KMI research and development project](https://kmi-netzwerk.org/kmi-projekt/
   <img src="src/feature_viz/funding/Logo_Kompetenzzentren_Arbeitsforschung.png" alt="logo ReKodA (Regional Competence Centres of Work Research)" width="150">
 </p>
 
-The running demonstrator carries the same notice, both on the served web page
-and in a strip along the bottom of the video canvas (`DECISIONS.md` §17).
+The running demonstrator carries the same notice: in the browser in the
+footer of the served web page, in the OpenCV window (`DISPLAY_MODE=window`)
+and on the stills in `docs/` in a strip along the bottom of the video canvas
+(`DECISIONS.md` §17).
 
 ## License
 

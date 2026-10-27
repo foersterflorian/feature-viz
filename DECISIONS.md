@@ -1069,6 +1069,30 @@ code was otherwise unchanged.
 Chrome draws more frames than the lower bound measured before and keeps
 its page at the full 60 Hz. Firefox goes from a frozen page to 35 FPS.
 
+
+### 14.5 The browser's canvas without the funding strip (§17)
+
+Measured 2026-10-27 on the **deployment machine**: NVIDIA GeForce RTX 4090,
+x86_64 (32 threads), driver 580.178.04, torch 2.14.0+cu130, ultralytics
+8.4.157, OpenCV 5.0.0. Commit `206a437`. Same harness and clip as §14.3.
+The local demonstrator was stopped first, so nothing else used the GPU.
+
+```bash
+python tools/benchmark.py --runs 3                       # the browser: no strip
+DISPLAY_MODE=window python tools/benchmark.py --runs 3   # the window: strip
+```
+
+| Configuration | Canvas | FPS mean (runs 1 / 2 / 3) | Median | p5 | Loop |
+|---|---|---|---|---|---|
+| GPU profile, browser, no strip | 3790×1212 | 50.2 / 49.7 / 49.5 | 50.1–50.8 | 45.8–46.7 | 19.9–20.2 ms |
+| GPU profile, window, 160 px strip | 3790×1372 | 43.1 / 46.9 / 46.6 | 44.9–47.6 | 35.2–43.8 | 21.3–23.2 ms |
+
+The stand's configuration gains about 3 FPS (49.8 against 46.8 without the
+slow first run), and its p5 rises from 35–44 to 46–47. That agrees with
+§14.3's "no strip" row (47.7–49.6) within its spread. `--no-funding-strip`,
+used in §14.3, is gone: the benchmark now follows `DISPLAY_MODE` exactly as
+the demonstrator does, and the window's run is the comparison.
+
 ---
 
 ## 15. Labels: a caption strip, not text on the tiles
@@ -1158,7 +1182,7 @@ conveyed by this repository.
 
 ---
 
-## 17. Funding notice: on the canvas and on the page
+## 17. Funding notice: in the page's footer, on the canvas where there is no page
 
 **Context.** The demonstrator comes out of the KMI project, funded by the
 BMFTR within the ReKodA initiative. The funding terms ask for an
@@ -1167,17 +1191,40 @@ Both logos are taken from the project's sibling repository `pyforcesim`
 (`img/`); the image files are byte-identical copies. The English wording is
 teach-by-showing's (its `funding.py`, §2), see below.
 
-**Decision.** The notice appears in three places: the `README.md`, the footer
-of the served web page (text, project link, logos on a white panel), and a
-white strip along the bottom of the video canvas, built by `funding_strip()`
-and appended in `compose()`.
+**Decision.** The notice appears in the `README.md`, in the footer of the
+served web page, and — where no page is around it — in a white strip along
+the bottom of the video canvas, built by `funding_strip()` and appended in
+`compose()`.
 
-**Why the canvas, not only the page.** At a talk the audience sees whatever is
-projected, and that is often not the page: `DISPLAY_MODE=window` has no page
-at all, `/stream.mjpg` can be opened full-screen on its own, and the stills in
-`docs/` are cut from the canvas. Only the canvas is guaranteed to be on
-screen. The page carries it as well because the page is where a reader looks
-for text and a link.
+- *The page* is one screen without scrolling: the title on top, the canvas
+  shrunk to the space left with its aspect ratio kept, and a white footer
+  along the bottom, as in teach-by-showing. The footer holds the logos, the
+  text and the project link; beside them, set apart by a rule and in
+  smaller, greyer type, the copyright, licence and source link (§16) and
+  the pipeline line, which used to stand in the title.
+- *The canvas* carries the strip when `Config.funding_on_canvas` is set.
+  `build_config()` sets it from `DISPLAY_MODE`: true for `window`, false for
+  the browser. `compose()` takes it keyword-only and without a default, so
+  that no caller drops the notice by accident. `tools/make_screenshot.py`
+  always passes true: the stills travel without a page.
+
+**Why the canvas, where there is no page.** At a talk the audience sees
+whatever is projected, and that is not always the page: `DISPLAY_MODE=window`
+has no page at all, and the stills in `docs/` are cut from the canvas. There
+only the canvas is guaranteed to be on screen.
+
+**Why the browser's canvas has no strip (changed 2026-10-27).** Until then
+the canvas carried the strip in every mode and the page repeated the notice
+below it, out of view on a full screen. On the stand the demonstrator runs
+in a Firefox kiosk beside teach-by-showing, whose notice is a footer of its
+page; the maintainer asked for the same here, decided on 2026-10-27 with the
+open tasks of §21. A footer of the page reads as one with the neighbour's,
+is set in the browser's type instead of JPEG text downscaled by half, can
+follow the screen's language (§21) where the canvas cannot, and gives back
+the strip's 160 rows: about 3 FPS on the deployment machine (§14.5).
+*Accepted with it:* `/frame.jpg` and `/stream.mjpg` opened on their own now
+carry no notice. They are not what is shown at a talk or on the stand; a
+talk that shows the bare picture uses the window, which keeps the strip.
 
 **Why it may grow the canvas, unlike the caption strips.** §15 fits the
 caption strip *into* the existing height so that it costs no area. Doing the
@@ -1220,8 +1267,12 @@ readable size is not one of them.
 
 **Rejected alternatives.**
 
-- *Page only.* Free in frame rate, but absent from window mode, the bare
-  stream and every still — i.e. from most of what an audience actually sees.
+- *Page only, in every mode.* Free in frame rate, but absent from window
+  mode and every still — what an audience sees whenever there is no page.
+- *Strip on the canvas and the footer in the browser, both.* The notice
+  twice on one screen, 3 FPS for the second, and the canvas's copy could
+  not follow the screen's language. It was the state until 2026-10-27,
+  with the page's copy below the canvas, out of view.
 - *Logo overlaid on the detection frame.* Costs no rows, but covers image
   content and, like the text overlays of §15, is not legible against it.
 - *A splash screen or periodic interstitial.* Satisfies the letter, but
