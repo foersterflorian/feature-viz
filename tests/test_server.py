@@ -12,36 +12,24 @@ import http.client
 import threading
 import time
 from collections.abc import Iterator
-from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
 
 from feature_viz import demonstrator as demo
+from tests.support import serve
 
 
 @pytest.fixture(scope="module")
-def server() -> Iterator[tuple[str, demo.FrameBuffer]]:
+def server(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[tuple[str, demo.FrameBuffer]]:
     """One live server on a free port for the whole module: shutdown() waits
     out serve_forever's 0.5 s poll interval, which per test would dominate the
-    run time. The class-level state start_server() writes into StreamHandler
-    is restored afterwards."""
-    saved: tuple[demo.FrameBuffer | None, str] = (
-        demo.StreamHandler.buffer,
-        demo.StreamHandler.info,
-    )
-    cfg: demo.Config = demo.Config(device="cpu", imgsz=416, targets=[4], tile=56, vis_every=1)
-    cfg.port = 0
-    buffer: demo.FrameBuffer = demo.FrameBuffer()
-    srv: ThreadingHTTPServer = demo.start_server(cfg, buffer, INFO)
-    host, port = srv.server_address[:2]
-    try:
-        yield f"http://{host!s}:{port}", buffer
-    finally:
-        srv.shutdown()
-        srv.server_close()
-        demo.StreamHandler.buffer, demo.StreamHandler.info = saved
+    run time."""
+    with serve(tmp_path_factory.mktemp("data"), INFO) as (url, buffer, _):
+        yield url, buffer
 
 
 # Markup in the info line must arrive as text: it includes the WEIGHTS path.
@@ -77,7 +65,7 @@ def test_page_carries_the_funding_notice(server: tuple[str, demo.FrameBuffer]) -
     """§17: text, project link and both logos, in the footer - the canvas
     no longer carries them in the browser."""
     notice: str = footer(get(server[0] + "/")[2].decode("utf-8"))
-    assert html.escape(demo.FUNDING_TEXT) in notice
+    assert html.escape(demo.FUNDING_TEXT[demo.DEFAULT_LANGUAGE]) in notice
     assert f'href="{demo.FUNDING_URL}"' in notice
     for name, _ in demo.FUNDING_LOGOS:
         assert f'src="/funding/{name}"' in notice

@@ -14,7 +14,10 @@ services:
     build: .
     image: feature-viz:0.2.1
     ports:
-      - "${HOST_PORT:-8080}:8080"
+      # Host side bound to localhost: the page is viewed on this machine
+      # (§7), and since the staff's keys switch language and theme over HTTP
+      # (§22, §23), nobody else on the venue's network should reach it.
+      - "127.0.0.1:${HOST_PORT:-8080}:8080"
     environment:
       SOURCE: "0"
     devices:
@@ -28,3 +31,10 @@ services:
       - "${VIDEO_GID:-44}"
     # PyTorch can stall on Docker's default 64 MB of shared memory.
     ipc: host
+    volumes:
+      - data:/data
+
+volumes:
+  # The staff's language and theme (§22, §23); survives rebuilds and
+  # restarts.
+  data:

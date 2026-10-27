@@ -4,6 +4,9 @@ pytest loads as a plugin and which is not meant to be imported from."""
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
@@ -18,7 +21,14 @@ ROOT: Path = Path(__file__).resolve().parent.parent
 
 # Every variable build_config() reads. Cleared per test so that a developer's
 # shell (e.g. FORCE_CPU=1 left exported) cannot change what a test sees.
-ENV_VARS: tuple[str, ...] = ("FORCE_CPU", "WEIGHTS", "SOURCE", "PORT", "DISPLAY_MODE")
+ENV_VARS: tuple[str, ...] = (
+    "FORCE_CPU",
+    "WEIGHTS",
+    "SOURCE",
+    "PORT",
+    "DISPLAY_MODE",
+    "DATA_DIR",
+)
 
 # Where the real checkpoint is looked for by the `weights` tests: $WEIGHTS if
 # set, otherwise the repository root, which is where a bare filename lands
@@ -47,3 +57,30 @@ def forward(model: YOLO, size: int = 160, seed: int = 0) -> object:
 
 def bgr(h: int, w: int, value: int = 0) -> demo.BGRImage:
     return np.full((h, w, 3), value, dtype=np.uint8)
+
+
+@contextmanager
+def serve(
+    data_dir: Path, info: str = ""
+) -> Iterator[tuple[str, demo.FrameBuffer, ThreadingHTTPServer]]:
+    """A live server on a free port that keeps its choices in `data_dir`.
+    The class-level state start_server() writes into StreamHandler is
+    restored afterwards, so that servers in different modules do not see
+    each other's."""
+    saved: tuple[demo.FrameBuffer | None, str, demo.Choices | None] = (
+        demo.StreamHandler.buffer,
+        demo.StreamHandler.info,
+        demo.StreamHandler.choices,
+    )
+    cfg: demo.Config = demo.Config(device="cpu", imgsz=416, targets=[4], tile=56, vis_every=1)
+    cfg.port = 0
+    cfg.data_dir = str(data_dir)
+    buffer: demo.FrameBuffer = demo.FrameBuffer()
+    srv: ThreadingHTTPServer = demo.start_server(cfg, buffer, info)
+    host, port = srv.server_address[:2]
+    try:
+        yield f"http://{host!s}:{port}", buffer, srv
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        demo.StreamHandler.buffer, demo.StreamHandler.info, demo.StreamHandler.choices = saved

@@ -58,8 +58,10 @@ COPY LICENSE /opt/feature-viz/LICENSE
 # Unprivileged. Camera access comes from the host's video group, added by
 # compose (group_add), not from running as root.
 # ultralytics needs YOLO_CONFIG_DIR to exist and creates Ultralytics/ inside.
+# /data keeps the staff's language and theme (§22, §23); the volume mounted
+# there inherits this ownership on first use.
 RUN useradd --system --uid 10001 --no-create-home feature-viz \
- && install -d -o feature-viz /tmp/ultralytics
+ && install -d -o feature-viz /tmp/ultralytics /data
 USER feature-viz
 WORKDIR /opt/feature-viz
 
@@ -67,7 +69,8 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONPATH=/opt/feature-viz/src \
     PYTHONUNBUFFERED=1 \
     WEIGHTS=/opt/feature-viz/weights/yolo26n.pt \
-    YOLO_CONFIG_DIR=/tmp/ultralytics
+    YOLO_CONFIG_DIR=/tmp/ultralytics \
+    DATA_DIR=/data
 
 # YOLO_CONFIG_DIR: the user has no home, and ultralytics would warn on every
 # start that it cannot write settings.json. Telemetry is off without anything

@@ -1,6 +1,8 @@
 # user-defined
 prototypes/
 *.pt
+# The staff's language and theme when run outside the container (DATA_DIR).
+/data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

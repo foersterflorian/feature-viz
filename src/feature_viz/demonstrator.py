@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import functools
 import html
+import json
 import mimetypes
 import os
 import signal
@@ -70,6 +71,7 @@ import threading
 import time
 from collections.abc import Callable, Generator, Iterator, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
@@ -169,6 +171,10 @@ class Config:
     # Only the window has no page around it; in the browser the page's footer
     # carries the notice. Set from display_mode in build_config().
     funding_on_canvas: bool = False
+    # Where the staff's language and theme are kept (DECISIONS.md §22, §23).
+    # Relative to the working directory; the container points it at its
+    # volume.
+    data_dir: str = "data"
 
     # Derived, not a constructor argument: see __post_init__.
     gamma_lut: NDArray[np.uint8] = field(init=False, repr=False)
@@ -201,6 +207,7 @@ def build_config() -> Config:
     cfg.funding_on_canvas = cfg.display_mode == "window"
     cfg.port = int(os.getenv("PORT", str(cfg.port)))
     cfg.source = os.getenv("SOURCE", "") or cfg.source
+    cfg.data_dir = os.getenv("DATA_DIR", "") or cfg.data_dir
     return cfg
 
 
@@ -492,27 +499,168 @@ class GridRenderer:
 
 
 # ==========================================================================
+# Screen language and theme
+# ==========================================================================
+# The page speaks German or English and comes dark or light, as the staff
+# choose with Ctrl+Alt+L and Ctrl+Alt+H; the choice survives a restart
+# (DECISIONS.md §22, §23). The canvas stays as it is: its few words are
+# technical, and it is image content, dark in both themes.
+class Language(StrEnum):
+    DE = "de"
+    EN = "en"
+
+
+class Theme(StrEnum):
+    DARK = "dark"
+    LIGHT = "light"
+
+
+# English and dark until the staff choose otherwise, as in teach-by-showing.
+DEFAULT_LANGUAGE: Final[Language] = Language.EN
+DEFAULT_THEME: Final[Theme] = Theme.DARK
+LANGUAGE_FILE: Final[str] = "language.json"
+THEME_FILE: Final[str] = "theme.json"
+
+
+@dataclass(frozen=True, slots=True)
+class Texts:
+    """Every word the page says, in one language. One instance per language,
+    so that a text missing in one of them is an error at import, not a gap
+    on the screen. Plain text: the page escapes it. `licence` holds the
+    placeholder {licence} for the link."""
+
+    page_title: str
+    headline: str
+    funding_more: str
+    licence: str
+    source: str
+    # The confirmation the staff see after a switch, each in its own words.
+    language_name: str
+    dark: str
+    light: str
+
+
+ENGLISH: Final[Texts] = Texts(
+    page_title="YOLO26 feature-map demonstrator",
+    headline="YOLO26 — detection and feature maps",
+    funding_more="More on the project:",
+    licence=(
+        "feature-viz, Copyright © 2026 Florian Förster — licensed under the "
+        "{licence} or later. Uses Ultralytics YOLO, also AGPL-3.0."
+    ),
+    source="Source:",
+    language_name="English",
+    dark="Dark",
+    light="Light",
+)
+GERMAN: Final[Texts] = Texts(
+    page_title="YOLO26-Demonstrator für Feature-Maps",
+    headline="YOLO26 – Objekterkennung und Feature-Maps",
+    funding_more="Mehr zum Projekt:",
+    licence=(
+        "feature-viz, Copyright © 2026 Florian Förster – lizenziert unter der "
+        "{licence} oder später. Verwendet Ultralytics YOLO, ebenfalls AGPL-3.0."
+    ),
+    source="Quellcode:",
+    language_name="Deutsch",
+    dark="Dunkel",
+    light="Hell",
+)
+TEXTS: Final[dict[Language, Texts]] = {Language.EN: ENGLISH, Language.DE: GERMAN}
+
+
+def load_choice[E: StrEnum](path: Path, key: str, kind: type[E], default: E) -> E:
+    """The choice as last stored; the default when nothing, or nothing
+    readable, is stored, so that a broken file never stops the demonstrator."""
+    if not path.exists():
+        return default
+    try:
+        return kind(json.loads(path.read_text(encoding="utf-8"))[key])
+    except (OSError, ValueError, KeyError, TypeError):
+        print(f"[warn] unreadable {path}; using {default}", file=sys.stderr)
+        return default
+
+
+def save_choice(path: Path, key: str, value: StrEnum) -> None:
+    """Written whole and then renamed, so that a crash never leaves half a
+    file behind."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial: Path = path.with_suffix(".partial")
+    partial.write_text(json.dumps({key: str(value)}), encoding="utf-8")
+    partial.replace(path)
+
+
+class Choices:
+    """The staff's language and theme, read from `data_dir` at start and
+    written back on every change. Knows nothing about HTTP.
+
+    A file that cannot be written leaves the choice in effect until the
+    next restart: losing it then is better than refusing the switch now.
+    """
+
+    def __init__(self, data_dir: Path) -> None:
+        self._dir: Path = data_dir
+        self._lock: threading.Lock = threading.Lock()
+        self._language: Language = load_choice(
+            data_dir / LANGUAGE_FILE, "language", Language, DEFAULT_LANGUAGE
+        )
+        self._theme: Theme = load_choice(data_dir / THEME_FILE, "theme", Theme, DEFAULT_THEME)
+
+    def current(self) -> tuple[Language, Theme]:
+        with self._lock:
+            return self._language, self._theme
+
+    def set_language(self, language: Language) -> None:
+        with self._lock:
+            self._language = language
+            self._save(LANGUAGE_FILE, "language", language)
+
+    def set_theme(self, theme: Theme) -> None:
+        with self._lock:
+            self._theme = theme
+            self._save(THEME_FILE, "theme", theme)
+
+    def _save(self, name: str, key: str, value: StrEnum) -> None:
+        try:
+            save_choice(self._dir / name, key, value)
+        except OSError as err:
+            print(f"[warn] cannot keep {key}={value}: {err}", file=sys.stderr)
+
+
+# ==========================================================================
 # Funding notice
 # ==========================================================================
 # The demonstrator comes out of the KMI project, and its funding terms ask
-# for this acknowledgement wherever results are shown. It is therefore part
-# of the canvas itself, not only of the web page: a talk may run in window
-# mode or show /stream.mjpg full-screen, and the stills in docs/ are cut from
-# the canvas. See DECISIONS.md §17.
+# for this acknowledgement wherever results are shown: in the browser in the
+# page's footer, in the window and on the stills in a strip along the bottom
+# of the canvas. See DECISIONS.md §17.
 #
-# Our translation of the funder's German notice, in British English and
-# naming the project "KMI" as the German does; character for character the
-# same as teach-by-showing's funding.py, so that the two demonstrators on the
-# stand read as a pair (DECISIONS.md §17). Typographic quotes included: the
-# OpenCV >= 5 that pyproject.toml requires renders them in putText.
-FUNDING_TEXT: Final[str] = (
-    "The KMI research and development project is funded as part of the "
-    "“Future of Work: Regional Competence Centres for Labour Research – "
-    "Artificial Intelligence” funding initiative within the “Innovations for "
-    "Tomorrow's Production, Services, and Work” programme of the German Federal "
-    "Ministry of Research, Technology and Space (BMFTR) and is supervised by "
-    "the Project Management Agency Karlsruhe (PTKA)."
-)
+# The German text verbatim from the funder's material, German quotes
+# included; the English one our translation of it, in British English and
+# naming the project "KMI" as the German does. Both character for character
+# the same as teach-by-showing's funding.py, so that the two demonstrators on
+# the stand read as a pair (DECISIONS.md §17). The page shows the one of its
+# language (§22); the canvas strip always the English one, since the canvas
+# is language-neutral. Typographic quotes included: the OpenCV >= 5 that
+# pyproject.toml requires renders them in putText.
+FUNDING_TEXT: Final[dict[Language, str]] = {
+    Language.DE: (
+        "Das Forschungs- und Entwicklungsprojekt KMI wird im Rahmen der Fördermaßnahme "
+        "„Zukunft der Arbeit: Regionale Kompetenzzentren der Arbeitsforschung – "
+        "Künstliche Intelligenz“ im Programm „Innovationen für die Produktion, "
+        "Dienstleistung und Arbeit von morgen“ des Bundesministeriums für Forschung, "
+        "Technologie und Raumfahrt (BMFTR) gefördert und vom Projektträger Karlsruhe "
+        "(PTKA) betreut."
+    ),
+    Language.EN: (
+        "The KMI research and development project is funded as part of the "
+        "“Future of Work: Regional Competence Centres for Labour Research – "
+        "Artificial Intelligence” funding initiative within the “Innovations for "
+        "Tomorrow's Production, Services, and Work” programme of the German Federal "
+        "Ministry of Research, Technology and Space (BMFTR) and is supervised by "
+        "the Project Management Agency Karlsruhe (PTKA)."
+    ),
+}
 FUNDING_URL: Final[str] = "https://kmi-netzwerk.org/kmi-projekt/"
 
 # (file in feature_viz/funding/, alt text). The files are the funder's
@@ -570,7 +718,7 @@ def funding_strip(width: int) -> BGRImage:
 
     pad: int = 16
     x0: int = sum(logo.shape[1] for logo in logos) + pad
-    lines: list[str] = _wrap(FUNDING_TEXT, FUNDING_TEXT_SCALE, width - x0 - pad)
+    lines: list[str] = _wrap(FUNDING_TEXT[Language.EN], FUNDING_TEXT_SCALE, width - x0 - pad)
     line_h: int = int(round(26 * FUNDING_TEXT_SCALE)) + 8
     h: int = max(FUNDING_STRIP_H, len(lines) * line_h + 2 * pad)
 
@@ -630,16 +778,21 @@ SOURCE_URL: Final[str] = "https://github.com/foersterflorian/feature-viz"
 # this instance ever runs modified code, SOURCE_URL has to point at *that*
 # version, not at the upstream repository.
 PAGE: Final[str] = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="{language}" data-theme="{theme}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YOLO26 feature-map demonstrator</title>
+<title>{page_title}</title>
 <style>
+  /* Every colour of the page a token, in a dark and a light set
+     (DECISIONS.md §23). The canvas is image content and stays dark; the
+     footer stays white for the BMFTR logo (§17). */
+  :root {{ --bg:#111; --fg:#ddd; --footer-edge:transparent; }}
+  :root[data-theme="light"] {{ --bg:#f4f4f2; --fg:#1a1a1a; --footer-edge:#c8c8c4; }}
   /* One screen, no scrolling (DECISIONS.md §17): title on top, the canvas
      shrunk to the space left, the footer along the bottom. Sizes in vh so
      that the kiosk's 4K monitor and a laptop show the same proportions;
      max() keeps the small print readable in a short window. */
   html, body {{ height:100%; margin:0; }}
-  body {{ background:#111; color:#ddd; font-family:sans-serif;
+  body {{ background:var(--bg); color:var(--fg); font-family:sans-serif;
          display:flex; flex-direction:column; }}
   h1 {{ font-size:max(16px, 2vh); font-weight:normal; margin:0;
        padding:1.2vh 1.5vw; }}
@@ -650,7 +803,7 @@ PAGE: Final[str] = """<!doctype html>
   /* White, because the BMFTR logo must sit on a white ground (§17). */
   footer {{ display:flex; align-items:center; gap:2vw; padding:0.8vh 2.5vw;
            background:#fff; color:#333; font-size:max(12px, 1.15vh);
-           line-height:1.35; }}
+           line-height:1.35; border-top:1px solid var(--footer-edge); }}
   footer p {{ margin:0; }}
   footer a {{ color:#1d4ed8; }}
   .funding {{ flex:1; display:flex; align-items:center; gap:2vw; }}
@@ -660,8 +813,16 @@ PAGE: Final[str] = """<!doctype html>
   .about {{ max-width:24vw; padding-left:2vw; border-left:1px solid #ccc;
            color:#555; font-size:max(11px, 1vh); }}
   .about p + p {{ margin-top:0.5vh; }}
+  /* The staff's confirmation after a switch, on a box of the ground's
+     colour so that it reads over the canvas too. */
+  #notice {{ position:fixed; top:8vh; left:50%; transform:translateX(-50%);
+            margin:0; padding:0.3vh 1.2vw; border-radius:0.6vh;
+            background:var(--bg); color:var(--fg); font-size:max(20px, 4vh);
+            font-weight:600; }}
 </style></head>
-<body><h1>YOLO26 &mdash; detection and feature maps</h1>
+<body><h1>{headline}</h1>
+<p id="notice" hidden data-language="{language_name}" data-dark="{dark}"
+   data-light="{light}"></p>
 <main>
 <canvas id="stream" role="img" aria-label="Stream"></canvas>
 <noscript><img src="/stream.mjpg" alt="Stream"></noscript>
@@ -696,21 +857,99 @@ PAGE: Final[str] = """<!doctype html>
     }}
   }}
 }})();
+
+// The staff's keys (DECISIONS.md section 22, 23): Ctrl+Alt+L switches the
+// language, Ctrl+Alt+H the theme, once per press. The server keeps the
+// choice. A new language reloads the page, whose words the server fills in;
+// a new theme only sets the attribute, so the picture keeps running.
+(() => {{
+  const root = document.documentElement;
+  const notice = document.getElementById("notice");
+  let timer = 0;
+  const confirm = (word) => {{
+    notice.textContent = word;
+    notice.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(() => {{ notice.hidden = true; }}, 3000);
+  }};
+  // Survives the reload, so that the new language is confirmed in itself.
+  const MARK = "feature-viz-language-switched";
+  try {{
+    if (sessionStorage.getItem(MARK)) {{
+      sessionStorage.removeItem(MARK);
+      confirm(notice.dataset.language);
+    }}
+  }} catch (err) {{}}  // storage blocked: the reload is confirmation enough
+  const choose = async (key, value) => {{
+    try {{
+      return (await fetch("/choice?" + key + "=" + value, {{ method: "POST" }})).ok;
+    }} catch (err) {{
+      return false;
+    }}
+  }};
+  window.addEventListener("keydown", async (e) => {{
+    if (!e.ctrlKey || !e.altKey || e.repeat) return;
+    const key = e.key.toLowerCase();
+    if (key === "l") {{
+      e.preventDefault();
+      if (await choose("language", root.lang === "de" ? "en" : "de")) {{
+        try {{ sessionStorage.setItem(MARK, "1"); }} catch (err) {{}}
+        location.reload();
+      }}
+    }} else if (key === "h") {{
+      e.preventDefault();
+      const theme = root.dataset.theme === "light" ? "dark" : "light";
+      if (await choose("theme", theme)) {{
+        root.dataset.theme = theme;
+        confirm(notice.dataset[theme]);
+      }}
+    }}
+  }});
+}})();
 </script>
 <footer>
 <section class="funding">{funding_logos}
-<p>{funding_text} More on the project:
+<p>{funding_text} {funding_more}
 <a href="{funding_url}">{funding_url}</a></p></section>
 <section class="about">
-<p>feature-viz, Copyright &copy; 2026 Florian F&ouml;rster &mdash; licensed
-under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a>
-or later. Uses Ultralytics YOLO, also AGPL-3.0.</p>
-<p>Source: <a href="{source}">{source}</a></p>
+<p>{licence}</p>
+<p>{source_label} <a href="{source}">{source}</a></p>
 <p>{info}</p>
 </section>
 </footer>
 </body></html>
 """
+
+
+LICENCE_LINK: Final[str] = (
+    '<a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL v3</a>'
+)
+
+
+def page(language: Language, theme: Theme, info: str) -> str:
+    """The page in the staff's language and theme. Every text is escaped
+    here; `info` carries the WEIGHTS path from the environment."""
+    texts: Texts = TEXTS[language]
+    return PAGE.format(
+        language=language,
+        theme=theme,
+        page_title=html.escape(texts.page_title),
+        headline=html.escape(texts.headline),
+        language_name=html.escape(texts.language_name),
+        dark=html.escape(texts.dark),
+        light=html.escape(texts.light),
+        info=html.escape(info),
+        source=SOURCE_URL,
+        source_label=html.escape(texts.source),
+        licence=html.escape(texts.licence).format(licence=LICENCE_LINK),
+        funding_text=html.escape(FUNDING_TEXT[language]),
+        funding_more=html.escape(texts.funding_more),
+        funding_url=FUNDING_URL,
+        funding_logos="".join(
+            f'<img src="/funding/{name}" alt="{html.escape(alt)}">'
+            for name, alt in FUNDING_LOGOS
+        ),
+    )
 
 
 _FUNDING_FILES: Final[frozenset[str]] = frozenset(name for name, _ in FUNDING_LOGOS)
@@ -766,6 +1005,7 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     buffer: ClassVar[FrameBuffer | None] = None
     info: ClassVar[str] = ""
+    choices: ClassVar[Choices | None] = None
     # The page fetches every frame separately (/frame.jpg). Under the
     # default HTTP/1.0 each of those would open a new TCP connection.
     protocol_version = "HTTP/1.1"
@@ -775,20 +1015,17 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
-            body: bytes = PAGE.format(
-                # info carries the WEIGHTS path from the environment.
-                info=html.escape(self.info),
-                source=SOURCE_URL,
-                funding_text=html.escape(FUNDING_TEXT),
-                funding_url=FUNDING_URL,
-                funding_logos="".join(
-                    f'<img src="/funding/{name}" alt="{html.escape(alt)}">'
-                    for name, alt in FUNDING_LOGOS
-                ),
-            ).encode("utf-8")
+            language, theme = (
+                self.choices.current()
+                if self.choices is not None
+                else (DEFAULT_LANGUAGE, DEFAULT_THEME)
+            )
+            body: bytes = page(language, theme, self.info).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            # A reload after a switch must not come from a cache (§22).
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
         elif self.path == "/healthz":
@@ -810,6 +1047,40 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.wfile.write(data)
         else:
             self.send_error(404)
+
+    def do_POST(self) -> None:
+        """`/choice?language=de|en` or `/choice?theme=dark|light`: the staff's
+        switch (DECISIONS.md §22, §23). Exactly one known key with a valid
+        value, and no body - which keeps this below §12's threshold for a
+        web framework."""
+        url = urlsplit(self.path)
+        if url.path != "/choice":
+            self.send_error(404)
+            return
+        if self.choices is None:
+            self.send_error(503, "no choices kept")
+            return
+        if int(self.headers.get("Content-Length") or 0) != 0:
+            # Unread, a body would be taken for the next request on this
+            # keep-alive connection.
+            self.close_connection = True
+            self.send_error(400, "no body expected")
+            return
+        params: dict[str, list[str]] = parse_qs(url.query, keep_blank_values=True)
+        try:
+            ((key, values),) = params.items()
+            (value,) = values
+            if key == "language":
+                self.choices.set_language(Language(value))
+            elif key == "theme":
+                self.choices.set_theme(Theme(value))
+            else:
+                raise ValueError(key)
+        except ValueError:
+            self.send_error(400, "expected one of language=de|en, theme=dark|light")
+            return
+        self.send_response(204)
+        self.end_headers()
 
     def _health(self) -> None:
         """200 while frames keep coming, 503 otherwise. "Process alive" is not
@@ -894,6 +1165,7 @@ class StreamHandler(BaseHTTPRequestHandler):
 def start_server(cfg: Config, buffer: FrameBuffer, info: str) -> ThreadingHTTPServer:
     StreamHandler.buffer = buffer
     StreamHandler.info = info
+    StreamHandler.choices = Choices(Path(cfg.data_dir))
     server: ThreadingHTTPServer = ThreadingHTTPServer(("0.0.0.0", cfg.port), StreamHandler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()

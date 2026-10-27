@@ -18,7 +18,7 @@ def test_notice_in_code_matches_readme_verbatim() -> None:
     readme: str = (ROOT / "README.md").read_text(encoding="utf-8")
     section: str = readme.split("## Funding", 1)[1].split("\n\n", 2)[1]
     plain: str = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", section).strip()
-    assert plain == demo.FUNDING_TEXT
+    assert plain == demo.FUNDING_TEXT[demo.Language.EN]
 
 
 def test_readme_shows_the_packaged_logos() -> None:
@@ -39,9 +39,9 @@ def test_wrap_keeps_every_word_and_fits_the_width(width: int) -> None:
     # _wrap is private, but its contract - no word lost, no line too wide -
     # is exactly what the strip depends on.
     lines: list[str] = demo._wrap(  # noqa: SLF001
-        demo.FUNDING_TEXT, demo.FUNDING_TEXT_SCALE, width
+        demo.FUNDING_TEXT[demo.Language.EN], demo.FUNDING_TEXT_SCALE, width
     )
-    assert " ".join(lines).split() == demo.FUNDING_TEXT.split()
+    assert " ".join(lines).split() == demo.FUNDING_TEXT[demo.Language.EN].split()
     for line in lines:
         w: int = cv2.getTextSize(line, demo.FONT, demo.FUNDING_TEXT_SCALE, 1)[0][0]
         assert w <= width
