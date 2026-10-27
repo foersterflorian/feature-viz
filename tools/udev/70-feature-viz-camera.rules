@@ -1,0 +1,20 @@
+# Start feature-viz again when its camera reappears (DECISIONS.md §9).
+#
+# A camera that drops off the USB bus for a moment ends the demonstrator's
+# run (§8). Docker restarts the container at once, but the camera's
+# /dev/v4l/by-id path does not exist yet, the start fails, and Docker does
+# not try again (§10). This rule hands the camera's return to systemd,
+# which starts the container once the device and its links are in place.
+#
+# Matches the camera's capture node by its serial, the same name as in
+# CAMERA_DEVICE in .env (/dev/v4l/by-id/usb-<ID_SERIAL>-video-index0); the
+# metadata node next to it has no capture capability. Another camera:
+# replace ID_SERIAL with the one `udevadm info --name=/dev/videoN` shows.
+#
+# Runs on the host, not in the container. Install with:
+#   sudo cp tools/udev/70-feature-viz-camera.rules /etc/udev/rules.d/
+#   sudo cp tools/systemd/feature-viz-camera.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo udevadm control --reload
+
+ACTION=="add", SUBSYSTEM=="video4linux", ENV{ID_SERIAL}=="UGREEN_Camera_UGREEN_Camera_SN0001", ENV{ID_V4L_CAPABILITIES}==":capture:", TAG+="systemd", ENV{SYSTEMD_WANTS}+="feature-viz-camera.service"

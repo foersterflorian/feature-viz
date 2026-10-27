@@ -1,0 +1,16 @@
+# Started by tools/udev/70-feature-viz-camera.rules when feature-viz's camera
+# appears (DECISIONS.md §9). Install instructions in that file.
+#
+# `docker start` on the container `docker compose up -d` created once: it
+# changes nothing when the container already runs - Docker's own restart got
+# there first - and needs neither the repository nor its .env. The name is
+# compose.yaml's project, service and replica number.
+
+[Unit]
+Description=Start feature-viz when its camera appears
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker start feature-viz-feature-viz-1
