@@ -31,6 +31,9 @@ services:
       - "${VIDEO_GID:-44}"
     # PyTorch can stall on Docker's default 64 MB of shared memory.
     ipc: host
+    # Back at every boot and after a crash, as teach-by-showing beside it on
+    # the stand; a container stopped by hand stays stopped (§9).
+    restart: unless-stopped
     volumes:
       - data:/data
 
