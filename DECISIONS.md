@@ -1671,7 +1671,10 @@ same in both languages.
 sample clip): at 2816 × 1584 the legend is 158 px high in both languages
 (text 23.8 px), the canvas 874 px high at the same place as without it —
 the width limits it, so the legend takes only space that was empty — and
-nothing scrolls. At 1280 × 800 nothing scrolls either.
+nothing scrolls. At 1280 × 800 nothing scrolls either. *Since the type
+was matched to teach-by-showing (§23, same day):* the legend is 245 px high
+in both languages (text 38.0 px, three lines held as before), the canvas
+855 px, and still nothing scrolls at either size.
 
 ---
 
@@ -1693,6 +1696,18 @@ with the maintainer on 2026-10-27.
   image content, like a photograph on the page; following the theme would
   mean the server rendering per theme.
 - *The footer stays white in both,* for the BMFTR logo (§17).
+- *Type as in teach-by-showing* (decided 2026-10-27, at the maintainer's
+  request, so that the two screens look alike): the same face
+  (`system-ui`), the headline at 3.2vh in semibold, the legend set like
+  the crane's hint, 2.4vh in a muted tone (`--muted`: #8a8a8a dark, #555
+  light, its values), and its text colour (#e6e6e6 instead of #ddd) and
+  side margins (2.5vw). Its rule that what a visitor reads is at least
+  2vh holds for the title and the legend; the footer's small print is at
+  its 1.15vh too. The licence column widens from 24vw to 30vw, so that the
+  footer is as high as the crane's. Measured at 2816 × 1584 (deployment
+  machine, the desktop app's browser, both pages): headline 50.7 px,
+  legend and hint 38.0 px, footer 137 px on both screens; the canvas
+  shrinks from 874 to 855 px for the wider margins.
 - *Dark by default,* switched with Ctrl+Alt+H, once per press, kept in
   `theme.json` beside the language (§22). The page posts the other theme
   and only sets `data-theme`, without a reload, so the picture keeps
@@ -1711,6 +1726,7 @@ restart. Text against its ground: 13.9:1 dark, 15.8:1 light (WCAG,
 computed from the tokens). On the stand, in the Firefox kiosk: see §22.
 
 `tests/test_theme.py` guards this section: the same tokens in both sets,
-text at least 4.5:1 on its ground in both, ground and text taken from the
-tokens and the footer white, the page in the stored theme, dark by default
-and kept across a restart, and the switch without a reload.
+text at least 4.5:1 on its ground in both (the muted legend 5.5:1 dark,
+6.8:1 light), ground and text taken from the tokens and the footer white,
+the page in the stored theme, dark by default and kept across a restart,
+the switch without a reload, and the type matching teach-by-showing.
