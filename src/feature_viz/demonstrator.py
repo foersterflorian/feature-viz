@@ -811,19 +811,24 @@ PAGE: Final[str] = """<!doctype html>
   /* Every colour of the page a token, in a dark and a light set
      (DECISIONS.md §23). The canvas is image content and stays dark; the
      footer stays white for the BMFTR logo (§17). */
-  :root {{ --bg:#111; --fg:#ddd; --footer-edge:transparent; }}
-  :root[data-theme="light"] {{ --bg:#f4f4f2; --fg:#1a1a1a; --footer-edge:#c8c8c4; }}
+  :root {{ --bg:#111; --fg:#e6e6e6; --muted:#8a8a8a; --footer-edge:transparent; }}
+  :root[data-theme="light"] {{ --bg:#f4f4f2; --fg:#1a1a1a; --muted:#555;
+                               --footer-edge:#c8c8c4; }}
+  /* Type as in teach-by-showing beside it on the stand: the same face, the
+     same sizes for its headline and its hint (§23). What a visitor is
+     meant to read is at least 2vh, there judged from standing distance. */
+  :root {{ --text-headline:3.2vh; --text-hint:2.4vh; }}
   /* One screen, no scrolling (DECISIONS.md §17): title on top, the canvas
      shrunk to the space left, the footer along the bottom. Sizes in vh so
      that the kiosk's 4K monitor and a laptop show the same proportions;
      max() keeps the small print readable in a short window. */
   html, body {{ height:100%; margin:0; }}
-  body {{ background:var(--bg); color:var(--fg); font-family:sans-serif;
+  body {{ background:var(--bg); color:var(--fg); font-family:system-ui, sans-serif;
          display:flex; flex-direction:column; }}
-  h1 {{ font-size:max(16px, 2vh); font-weight:normal; margin:0;
-       padding:1.2vh 1.5vw; }}
+  h1 {{ font-size:max(20px, var(--text-headline)); font-weight:600; margin:0;
+       padding:1.6vh 2.5vw 0; }}
   main {{ flex:1; min-height:0; display:flex; align-items:center;
-         justify-content:center; padding:0 1.5vw 1.2vh; }}
+         justify-content:center; padding:0 2.5vw 1.2vh; }}
   /* Both limits on a replaced element keep its aspect ratio. */
   main canvas, main img {{ max-width:100%; max-height:100%; display:block; }}
   /* White, because the BMFTR logo must sit on a white ground (§17). */
@@ -836,13 +841,15 @@ PAGE: Final[str] = """<!doctype html>
   .funding img {{ height:max(80px, 7vh); width:auto; }}
   /* Licence and pipeline, set off from the funding notice: a rule, a
      narrower column, smaller and greyer type. */
-  .about {{ max-width:24vw; padding-left:2vw; border-left:1px solid #ccc;
+  /* 30vw: at the stand's size the footer is then as high as
+     teach-by-showing's, 137 px, and the funding text keeps its lines. */
+  .about {{ max-width:30vw; padding-left:2vw; border-left:1px solid #ccc;
            color:#555; font-size:max(11px, 1vh); }}
   .about p + p {{ margin-top:0.5vh; }}
   /* What is where and how to read a tile (§22): below the title, in the
      space the width-limited canvas leaves free on the stand's monitor. */
-  .legend {{ padding:0 1.5vw 1.2vh; font-size:max(13px, 1.5vh);
-            line-height:1.4; max-width:120ch; }}
+  .legend {{ padding:0.4vh 2.5vw 1.2vh; font-size:max(14px, var(--text-hint));
+            line-height:1.4; max-width:120ch; color:var(--muted); }}
   .legend p {{ margin:0; }}
   /* Three lines held for the explanation, which the German fills at the
      stand's size and the English does not: the canvas then keeps its
