@@ -1530,11 +1530,10 @@ maintainer's request so that they are not lost.
   teach-by-showing is getting a light mode beside today's dark one,
   switched by the staff with Ctrl+Alt+H, dark by default (decided
   2026-10-22). The funding footer's white stays white in both (§17).
-- **An explanatory text for visitors** — *open, deferred on 2026-10-27.*
-  The page says what it shows only in its title. A short text on what a
-  feature map is and how to read the tiles was proposed while the screen
-  language was decided and set aside by the maintainer for later. It
-  would join the catalogue of §22 in both languages.
+- **An explanatory text for visitors** — *done on 2026-10-27, see §22.*
+  Set aside while the screen language was decided, then taken up the same
+  day: a two-line legend under the title rather than a longer text, the
+  rest explained by the staff.
 
 ---
 
@@ -1552,6 +1551,13 @@ stand, lets the staff switch its screen between German and English (its
   the layer labels and the detector's class names — technical, the same in
   both languages, and drawn into the image, where they cannot follow a
   switch.
+- *A legend under the title* (added 2026-10-27): one line on what is
+  where (left what the network recognises, right what its layers "see"),
+  one on how to read a tile (a trained pattern detector, lighter where it
+  responded more strongly; edges and contrasts top left, larger shapes
+  bottom right). Worded by the maintainer. It does not use the term
+  "feature map" — the title does — and explains no CNN: the staff do that
+  in conversation, at the screen.
 - *Two languages, English by default,* German and English in British
   spelling, as in teach-by-showing.
 - *One catalogue in `demonstrator.py`:* a frozen dataclass `Texts`, one
@@ -1621,7 +1627,40 @@ every text in both languages, the page in each language, English by
 default and kept across a restart, the fallback for an unreadable file,
 the file written whole, a choice that cannot be written still taking
 effect, the switch kept and the next page following, everything but one
-known choice refused, and the reload on Ctrl+Alt+L.
+known choice refused, the reload on Ctrl+Alt+L, and the legend's room the
+same in both languages.
+
+**The legend, in detail** (2026-10-27).
+
+- *A legend, not an explanation.* The maintainer had found, explaining
+  feature maps to colleagues, that it was unclear what a feature map is,
+  since how a CNN works was not known. A paragraph on screen would not
+  change that at a fair, where few read more than a line and those who
+  stay ask; but with two demonstrators and the staff at the crane, a
+  visitor at this screen sees a camera picture beside grey noise and no
+  hint that the two belong together. Two lines close that gap.
+- *Only the corners are described.* The first draft said the detectors
+  respond to "ever larger" shapes towards the bottom right. The live grid
+  (sample clip, GPU profile) does not show that: in reading order L2
+  (96×160) and L4 (48×80) show fine edges, L9 and L10 (12×20) coarse
+  areas, L16 (48×80) fine edges again — the neck upsamples deep features
+  and joins them with earlier ones — and L22 (12×20) coarse blobs. Top
+  left and bottom right hold; "ever"/"increasingly" was dropped.
+- *The corners are the GPU profile's.* Six layers in three columns, as on
+  the stand. The CPU profile shows three layers in one row, where "top
+  left" and "bottom right" do not fit; it is for functional tests (§5),
+  so the text is not made to depend on the profile.
+- *The room is held.* At the stand's size the German explanation takes
+  three lines and the English two, which moved the vertically centred
+  canvas by 17 px on a switch. Three lines are held for it, so legend and
+  canvas stand at the same place in both, as in teach-by-showing (its
+  §24).
+
+**Measured** (deployment machine, 2026-10-27, the desktop app's browser,
+sample clip): at 2816 × 1584 the legend is 158 px high in both languages
+(text 23.8 px), the canvas 874 px high at the same place as without it —
+the width limits it, so the legend takes only space that was empty — and
+nothing scrolls. At 1280 × 800 nothing scrolls either.
 
 ---
 
