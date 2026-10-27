@@ -639,7 +639,7 @@ variants were run end to end, each delivering frames to the host.
   foreground — stays stopped, at the next boot too; for the stand it is
   therefore started detached. *It does not cover a camera that drops off
   the USB bus* (seen 2026-10-27, §10): the run ends, and the restart fails
-  while the device path is missing. *Checked* (deployment machine,
+  while the device path is missing — see the next item. *Checked* (deployment machine,
   image 0.3.0, sample clip): the demonstrator ended from inside the
   container was running again, restart count 1, and healthy within about
   4 s; after `docker compose stop` it stayed exited. *At boot* (deployment
@@ -647,6 +647,25 @@ variants were run end to end, each delivering frames to the host.
   stopped): the machine came up at 09:21:21, and feature-viz 0.3.0 and
   teach-by-showing 0.2.0 were both started by Docker at 09:21:51, restart
   count 0, and healthy when looked at five minutes later.
+- *The host starts the container when its camera returns* (since
+  2026-10-27). `tools/udev/70-feature-viz-camera.rules` matches the
+  camera's capture node by its serial — the name `CAMERA_DEVICE` uses —
+  and wants `tools/systemd/feature-viz-camera.service`, a oneshot unit that
+  runs `docker start feature-viz-feature-viz-1`. systemd starts it once the
+  device and its `/dev/v4l/by-id` link exist, which is exactly what Docker's
+  own restart lacked. When that restart got there first, `docker start`
+  changes nothing. Installed once with sudo (the commands are in the rule
+  file), like teach-by-showing's gamepad rule. Consequences: a container
+  stopped by hand starts again when the camera is plugged in, at boot too;
+  another camera needs its serial in the rule.
+  *Weighed and set aside:* the demonstrator reopening the camera itself,
+  against §8, which ends the run on a failed camera so as not to hide the
+  failure — and inside the container probably futile, since Docker allows
+  only the device number it found at start, and a camera returning while
+  the old one is still held open gets another; and giving the container
+  every video device and `/dev` (`device_cgroup_rules`), much more access
+  than one camera needs. `tests/test_tools.py` checks that the unit names
+  the container Compose creates and that the rule wants the unit.
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
@@ -774,10 +793,14 @@ it.
   restarted it at once, while `/dev/v4l/by-id/…` did not exist yet, and
   the start failed with `error gathering device information … no such
   file or directory`. After a failed start Docker does not try again, so
-  the container stayed exited with the camera back. Until that is solved,
-  `docker compose up -d` brings it back. Ways out, not yet weighed: the
-  demonstrator reopening the camera instead of ending, or passing the
-  camera to the container in a way that survives the node disappearing.
+  the container stayed exited with the camera back. *Remedy in place, not
+  yet tested:* a udev rule and a systemd unit on the host start the
+  container when the camera returns (§9). Still to be seen: unplugging
+  and replugging the camera with the container running, with both
+  installed. In the same second the kernel also logged a second device
+  on the bus (`usb 1-3.1`) disconnecting, which points at power or a hub
+  rather than the camera; on the stand the camera goes into a port of the
+  machine itself.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -1347,7 +1370,7 @@ file it protects:
 
 | Tier | File | Needs | Protects |
 |---|---|---|---|
-| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py`, `test_theme.py` | nothing | §4, §5, §7, §8, §14, §15, §17, §19, §20, §23 |
+| Unit | `test_config.py`, `test_render.py`, `test_funding.py`, `test_buffer.py`, `test_tools.py`, `test_telemetry.py`, `test_theme.py` | nothing | §4, §5, §7, §8, §9, §14, §15, §17, §19, §20, §23 |
 | Model | `test_tap.py` | nothing | §2, §3, §3.1, §5 |
 | HTTP | `test_server.py`, `test_texts.py` | nothing | §7, §16, §17, §22 |
 | End-to-end | `test_e2e.py` | `yolo26n.pt`, except the no-camera test; a webcam for the `camera` tests | §3, §8, §11, §17 |

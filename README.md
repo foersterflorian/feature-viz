@@ -44,6 +44,16 @@ docker compose -f compose.yaml -f compose.sample.yaml up   # GPU, sample clip
 docker compose -f compose.yaml -f compose.cpu.yaml up      # no GPU, sample clip
 ```
 
+On the stand, the host also starts the container when its camera returns
+after dropping off the USB bus (once, with sudo; `DECISIONS.md` §9):
+
+```bash
+sudo cp tools/udev/70-feature-viz-camera.rules /etc/udev/rules.d/
+sudo cp tools/systemd/feature-viz-camera.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo udevadm control --reload
+```
+
 To move or archive the image as one self-contained file:
 
 ```bash
