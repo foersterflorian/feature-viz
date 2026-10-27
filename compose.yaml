@@ -12,7 +12,7 @@ name: feature-viz
 services:
   feature-viz:
     build: .
-    image: feature-viz:0.3.0
+    image: feature-viz:0.3.1
     ports:
       # Host side bound to localhost: the page is viewed on this machine
       # (§7), and since the staff's keys switch language and theme over HTTP
