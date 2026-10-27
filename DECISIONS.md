@@ -666,6 +666,15 @@ variants were run end to end, each delivering frames to the host.
   every video device and `/dev` (`device_cgroup_rules`), much more access
   than one camera needs. `tests/test_tools.py` checks that the unit names
   the container Compose creates and that the rule wants the unit.
+  *Checked* (deployment machine, 2026-10-27, image 0.3.0 with the webcam,
+  rule and unit installed as above, the maintainer unplugging and
+  replugging the camera): unplugged at 13:11:47, the run ended (`[info]
+  stopped`) and Docker's restart failed a second later with the same
+  `error gathering device information` as before; replugged at 13:11:58,
+  the unit ran at 13:11:59 and started the container, which opened the
+  camera as `MJPG 1280x720 @ 30` at 13:12:01 — 3.8 s after the camera
+  was back — and passed its next health check at 13:12:04, frames served
+  again.
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
@@ -786,21 +795,12 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
-- **A camera that drops off the USB bus leaves the container down.**
-  Seen on the deployment machine on 2026-10-27 at 09:29:28: the kernel
-  logged the UGREEN camera disconnecting and reconnecting within a
-  second. The demonstrator ended its run as §8 intends, exit 0; Docker
-  restarted it at once, while `/dev/v4l/by-id/…` did not exist yet, and
-  the start failed with `error gathering device information … no such
-  file or directory`. After a failed start Docker does not try again, so
-  the container stayed exited with the camera back. *Remedy in place, not
-  yet tested:* a udev rule and a systemd unit on the host start the
-  container when the camera returns (§9). Still to be seen: unplugging
-  and replugging the camera with the container running, with both
-  installed. In the same second the kernel also logged a second device
-  on the bus (`usb 1-3.1`) disconnecting, which points at power or a hub
-  rather than the camera; on the stand the camera goes into a port of the
-  machine itself.
+- **The USB disconnect of 2026-10-27, 09:29.** The camera dropped off the
+  bus for a second and the container stayed down; since solved (§9). In the
+  same second the kernel also logged a second device on the bus
+  (`usb 1-3.1`) disconnecting, which points at power or a hub rather than
+  the camera. Not looked into; on the stand the camera goes into a port of
+  the machine itself.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
