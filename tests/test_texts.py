@@ -47,7 +47,14 @@ def test_the_page_comes_in_its_language(language: demo.Language) -> None:
     texts: demo.Texts = demo.TEXTS[language]
     page: str = demo.page(language, demo.Theme.DARK, "info")
     assert f'<html lang="{language}"' in page
-    for text in (texts.page_title, texts.headline, texts.funding_more, texts.source):
+    for text in (
+        texts.page_title,
+        texts.headline,
+        texts.legend,
+        texts.explanation,
+        texts.funding_more,
+        texts.source,
+    ):
         assert html.escape(text) in page
     assert html.escape(demo.FUNDING_TEXT[language]) in page
     assert html.escape(texts.licence).format(licence=demo.LICENCE_LINK) in page
