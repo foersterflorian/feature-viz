@@ -637,9 +637,9 @@ variants were run end to end, each delivering frames to the host.
   without anyone starting it by hand. A container stopped by hand — `docker
   compose stop`, or Ctrl+C on `start-container.sh`, which runs in the
   foreground — stays stopped, at the next boot too; for the stand it is
-  therefore started detached. A source that cannot be opened (§8) now
-  restarts under Docker's growing back-off instead of staying down, so a
-  camera plugged in late is picked up. *Checked* (deployment machine,
+  therefore started detached. *It does not cover a camera that drops off
+  the USB bus* (seen 2026-10-27, §10): the run ends, and the restart fails
+  while the device path is missing. *Checked* (deployment machine,
   image 0.3.0, sample clip): the demonstrator ended from inside the
   container was running again, restart count 1, and healthy within about
   4 s; after `docker compose stop` it stayed exited. *At boot* (deployment
@@ -767,6 +767,17 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
+- **A camera that drops off the USB bus leaves the container down.**
+  Seen on the deployment machine on 2026-10-27 at 09:29:28: the kernel
+  logged the UGREEN camera disconnecting and reconnecting within a
+  second. The demonstrator ended its run as §8 intends, exit 0; Docker
+  restarted it at once, while `/dev/v4l/by-id/…` did not exist yet, and
+  the start failed with `error gathering device information … no such
+  file or directory`. After a failed start Docker does not try again, so
+  the container stayed exited with the camera back. Until that is solved,
+  `docker compose up -d` brings it back. Ways out, not yet weighed: the
+  demonstrator reopening the camera instead of ending, or passing the
+  camera to the container in a way that survives the node disappearing.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
