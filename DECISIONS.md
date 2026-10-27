@@ -678,7 +678,7 @@ variants were run end to end, each delivering frames to the host.
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
-- *Image tag follows the package version* (`feature-viz:0.3.0`);
+- *Image tag follows the package version* (`feature-viz:0.3.1`);
   `bump-my-version` updates `compose.yaml` and the archive commands in
   `README.md` along with `pyproject.toml`. Bump with `--new-version`: the
   configured pre-release part makes a plain `bump minor` produce `0.2.0dev0`.
