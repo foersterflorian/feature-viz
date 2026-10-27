@@ -40,7 +40,7 @@ Details and rationale: `DECISIONS.md` §9.
 
 ## Funding
 
-The [K-M-I research and development project](https://kmi-netzwerk.org/kmi-projekt/) is funded as part of the “Future of Work: Regional Competence Centers for Labor Research – Artificial Intelligence” funding initiative within the “Innovations for Tomorrow's Production, Services, and Work” program of the German Federal Ministry of Research, Technology and Space (BMFTR) and is supervised by the Project Management Agency Karlsruhe (PTKA).
+The [KMI research and development project](https://kmi-netzwerk.org/kmi-projekt/) is funded as part of the “Future of Work: Regional Competence Centres for Labour Research – Artificial Intelligence” funding initiative within the “Innovations for Tomorrow's Production, Services, and Work” programme of the German Federal Ministry of Research, Technology and Space (BMFTR) and is supervised by the Project Management Agency Karlsruhe (PTKA).
 
 <p align="left">
   <img src="src/feature_viz/funding/BMFTR_de_Web_RGB_gef_durch.jpg" alt="funding logo" width="300">

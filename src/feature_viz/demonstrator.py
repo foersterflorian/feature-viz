@@ -489,19 +489,22 @@ class GridRenderer:
 # ==========================================================================
 # Funding notice
 # ==========================================================================
-# The demonstrator comes out of the K-M-I project, and its funding terms ask
+# The demonstrator comes out of the KMI project, and its funding terms ask
 # for this acknowledgement wherever results are shown. It is therefore part
 # of the canvas itself, not only of the web page: a talk may run in window
 # mode or show /stream.mjpg full-screen, and the stills in docs/ are cut from
 # the canvas. See DECISIONS.md §17.
 #
-# Verbatim from the project's funding notice, typographic quotes included:
-# the OpenCV >= 5 that pyproject.toml requires renders them in putText.
+# Our translation of the funder's German notice, in British English and
+# naming the project "KMI" as the German does; character for character the
+# same as teach-by-showing's funding.py, so that the two demonstrators on the
+# stand read as a pair (DECISIONS.md §17). Typographic quotes included: the
+# OpenCV >= 5 that pyproject.toml requires renders them in putText.
 FUNDING_TEXT: Final[str] = (
-    "The K-M-I research and development project is funded as part of the "
-    "“Future of Work: Regional Competence Centers for Labor Research – "
+    "The KMI research and development project is funded as part of the "
+    "“Future of Work: Regional Competence Centres for Labour Research – "
     "Artificial Intelligence” funding initiative within the “Innovations for "
-    "Tomorrow's Production, Services, and Work” program of the German Federal "
+    "Tomorrow's Production, Services, and Work” programme of the German Federal "
     "Ministry of Research, Technology and Space (BMFTR) and is supervised by "
     "the Project Management Agency Karlsruhe (PTKA)."
 )
