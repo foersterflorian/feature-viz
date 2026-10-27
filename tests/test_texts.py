@@ -120,3 +120,12 @@ def test_the_page_switches_the_language_by_reloading() -> None:
     branch: str = keys.split('key === "l"', 1)[1].split('key === "h"', 1)[0]
     assert "if (!e.ctrlKey || !e.altKey || e.repeat) return;" in keys
     assert 'choose("language"' in branch and "location.reload()" in branch
+
+
+def test_the_legend_holds_its_lines_whatever_the_language() -> None:
+    """The explanation keeps three lines' room, which the German fills at the
+    stand's size and the English does not, so that the canvas stays in place
+    when the staff switch the language."""
+    page: str = demo.page(demo.Language.EN, demo.Theme.DARK, "")
+    rule: str = page.split("  .legend p + p {", 1)[1].split("}", 1)[0]
+    assert "min-height:calc(3 * 1.4em)" in rule
