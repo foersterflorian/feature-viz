@@ -710,6 +710,22 @@ MJPG 1280x720 @ 30`, exit 0 on stop (frame rate not measured). Archive `feature-
 `zstd -t` clean. Config digest `sha256:bf024fe7…`, manifest digest
 `sha256:c96394ff…`; full values and the file's SHA-256 next to the archive.
 
+**Version 0.3.0** (2026-10-27, commit `d079706`). The page's footer, the
+screen language and the theme (§17, §22, §23), the data volume and the port
+bound to localhost make the image behave differently from the 0.2.1
+archive. Built on the deployment machine in 7.0 min, `demonstrator.py`
+identical to the repository's. GPU + sample clip became healthy 3.1 s after
+`up -d` returned, 47.0 FPS at a host client over 20 s (the canvas no longer
+carries the strip, §14.5); not reachable at the machine's network address.
+On the `feature-viz_data` volume a switch to German and light returned 204,
+survived `docker compose restart`, and was then set back to English and
+dark; the files belong to UID 10001. Webcam variant via
+`start-container.sh`: `[info] camera: MJPG 1280x720 @ 30`, 28.8 FPS at a
+host client over 20 s. Both exit 0 on stop. Archive
+`feature-viz-0.3.0.tar.zst`: 3.3 GB, written in 17 s, `zstd -t` clean.
+Config digest `sha256:82e08386…`, manifest digest `sha256:aa52e057…`; full
+values and the file's SHA-256 next to the archive.
+
 **Known limitation.** Docker does not abstract the GPU. A target machine still
 needs an NVIDIA card, a driver ≥ 580 and the container toolkit — or it runs the
 CPU variant.
