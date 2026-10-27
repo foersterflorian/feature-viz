@@ -69,13 +69,31 @@ def test_page_carries_the_agpl_source_offer(
     assert html.escape(INFO) in page and INFO not in page
 
 
+def footer(page: str) -> str:
+    return page.split("<footer>", 1)[1].split("</footer>", 1)[0]
+
+
 def test_page_carries_the_funding_notice(server: tuple[str, demo.FrameBuffer]) -> None:
-    """§17: text, project link and both logos."""
-    page: str = get(server[0] + "/")[2].decode("utf-8")
-    assert html.escape(demo.FUNDING_TEXT) in page
-    assert f'href="{demo.FUNDING_URL}"' in page
+    """§17: text, project link and both logos, in the footer - the canvas
+    no longer carries them in the browser."""
+    notice: str = footer(get(server[0] + "/")[2].decode("utf-8"))
+    assert html.escape(demo.FUNDING_TEXT) in notice
+    assert f'href="{demo.FUNDING_URL}"' in notice
     for name, _ in demo.FUNDING_LOGOS:
-        assert f'src="/funding/{name}"' in page
+        assert f'src="/funding/{name}"' in notice
+
+
+def test_footer_sets_licence_and_pipeline_apart_from_the_funding_notice(
+    server: tuple[str, demo.FrameBuffer],
+) -> None:
+    """§17: one footer, two sections - the funding notice, and beside it the
+    AGPL source offer and the pipeline line, which left the title."""
+    page: str = get(server[0] + "/")[2].decode("utf-8")
+    funding, about = footer(page).split('<section class="about">', 1)
+    assert "GNU AGPL v3" in about and f'href="{demo.SOURCE_URL}"' in about
+    assert html.escape(INFO) in about
+    assert "GNU AGPL" not in funding and html.escape(INFO) not in funding
+    assert html.escape(INFO) not in page.split("<footer>", 1)[0]
 
 
 @pytest.mark.parametrize(

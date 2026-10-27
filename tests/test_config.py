@@ -66,6 +66,16 @@ def test_environment_overrides(monkeypatch: pytest.MonkeyPatch, cpu_cfg: demo.Co
     )
 
 
+@pytest.mark.parametrize(("mode", "on_canvas"), [("mjpeg", False), ("window", True)])
+def test_funding_strip_only_where_no_page_carries_it(
+    monkeypatch: pytest.MonkeyPatch, mode: str, on_canvas: bool
+) -> None:
+    """§17: the browser shows the notice in the page's footer, the window has
+    no page and keeps the strip. A parameter, not a branch (§5)."""
+    monkeypatch.setenv("DISPLAY_MODE", mode)
+    assert demo.build_config().funding_on_canvas is on_canvas
+
+
 def test_webcam_is_the_default_source(cpu_cfg: demo.Config) -> None:
     """§8: the live picture is what the demonstrator is for."""
     assert cpu_cfg.source == "0"

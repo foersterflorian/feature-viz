@@ -114,3 +114,15 @@ def test_compose_puts_the_funding_strip_at_the_bottom() -> None:
     )
     strip: demo.BGRImage = demo.funding_strip(canvas.shape[1])
     assert np.array_equal(canvas[-strip.shape[0] :], strip)
+
+
+def test_compose_leaves_the_strip_to_the_page() -> None:
+    """§17: in the browser the page's footer carries the notice, so the
+    canvas ends with the grid and is exactly as high as it (the grid set
+    taller than frame plus caption, so that it sets the height)."""
+    grid: demo.BGRImage = bgr(900, 1500, value=33)
+    canvas: demo.BGRImage = demo.compose(
+        bgr(360, 640), grid, 30.0, "info", funding_on_canvas=False
+    )
+    assert canvas.shape[0] == grid.shape[0]
+    assert np.array_equal(canvas[:, -grid.shape[1] :], grid)
