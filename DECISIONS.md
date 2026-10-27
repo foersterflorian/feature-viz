@@ -642,8 +642,11 @@ variants were run end to end, each delivering frames to the host.
   camera plugged in late is picked up. *Checked* (deployment machine,
   image 0.3.0, sample clip): the demonstrator ended from inside the
   container was running again, restart count 1, and healthy within about
-  4 s; after `docker compose stop` it stayed exited. The return at boot
-  was not checked (§10).
+  4 s; after `docker compose stop` it stayed exited. *At boot* (deployment
+  machine, 2026-10-27, both containers started with `up -d` and not
+  stopped): the machine came up at 09:21:21, and feature-viz 0.3.0 and
+  teach-by-showing 0.2.0 were both started by Docker at 09:21:51, restart
+  count 0, and healthy when looked at five minutes later.
 - *`docker stop` ends cleanly*: SIGTERM reaches the demonstrator as PID 1,
   whose handler stops the loop; with the webcam too, since the shutdown fix
   in §8 (verified: exit 0, no crash).
@@ -764,15 +767,6 @@ it.
   Whether that meets the funder's minimum-size rule for screen use was not
   checked against the current BMFTR design manual, and on a 1920-wide
   projector the canvas — strip included — is downscaled by about half.
-- **The staff's keys in the feature-viz kiosk on the stand.** Ctrl+Alt+L
-  and Ctrl+Alt+H were pressed in the desktop app's browser and confirmed in
-  the container (§22, §23), not yet in the Firefox kiosk beside
-  teach-by-showing, where they only reach the kiosk that has the focus.
-  teach-by-showing confirmed both combinations free under COSMIC and in
-  Firefox (its §24, §25).
-- **feature-viz back after a reboot.** `restart: unless-stopped` (§9) was
-  checked for a demonstrator that exits, not for a reboot of the machine.
-  Docker documents both; to be seen at the first cold start of the stand.
 - **pyright has never been run.** `pyproject.toml` configures it (basic mode)
   but it is not installed; only mypy is. The two need not agree — see §13.
 
@@ -1614,7 +1608,13 @@ a restart of the demonstrator the page came in German again; no scrolling
 in either language. In a container built from this commit, with a volume at
 `/data`: the files belong to the container's user, and after a restart of
 the container the page came in the stored language and theme. The Firefox
-kiosk on the stand is still to be checked (§10).
+kiosk on the stand was checked afterwards, below.
+
+**Judged on the stand** (deployment machine, 2026-10-27, the maintainer,
+after a reboot: the stand account `kmi-demonstratoren`, both kiosks opened
+by teach-by-showing's `tools/stand.py`, image 0.3.0 with the webcam): after
+a click into the feature-viz kiosk, Ctrl+Alt+L and Ctrl+Alt+H worked there,
+and the gamepad kept driving the crane in the other kiosk meanwhile.
 
 `tests/test_texts.py` guards this section: the funder's German wording,
 every text in both languages, the page in each language, English by
@@ -1658,7 +1658,7 @@ kept by the server, since browser storage starts empty in every kiosk.
 at once while frames kept arriving, confirmed with "Light" and later
 "Dunkel"; the confirmation hid after 3 s; the light theme survived a
 restart. Text against its ground: 13.9:1 dark, 15.8:1 light (WCAG,
-computed from the tokens).
+computed from the tokens). On the stand, in the Firefox kiosk: see §22.
 
 `tests/test_theme.py` guards this section: the same tokens in both sets,
 text at least 4.5:1 on its ground in both, ground and text taken from the
