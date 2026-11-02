@@ -32,8 +32,11 @@ itself stays the same in every language and theme.
 The image runs exactly the versions in `pdm.lock`, with the weights built in,
 and needs no network at runtime. Host requirements: Docker Engine ≥ 28.2 (the
 native engine, not Docker Desktop), NVIDIA driver ≥ 580, and
-nvidia-container-toolkit ≥ 1.18 with a CDI spec
-(`sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`).
+nvidia-container-toolkit ≥ 1.18. Its `nvidia-cdi-refresh` service writes the
+CDI spec to `/var/run/cdi/nvidia.yaml` at boot and after driver changes; check
+with `systemctl is-enabled nvidia-cdi-refresh.path`. Do not also generate one
+into `/etc/cdi/` by hand: it goes stale with the next driver update
+(`DECISIONS.md` §9).
 
 ```bash
 cp .env.example .env         # set CAMERA_DEVICE and VIDEO_GID for this machine
