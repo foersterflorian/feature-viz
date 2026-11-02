@@ -30,8 +30,8 @@ The original version was built on YOLOv7 and ran at ~30 FPS from a webcam.
 
 **Context.** The original used YOLOv7 (WongKinYiu lineage). The current state of
 the YOLO family lives in the Ultralytics ecosystem. YOLO26 was released in
-January 2026: NMS-free end-to-end inference, DFL removed, edge-optimised, five
-scales (n/s/m/l/x), AGPL-3.0.
+January 2026: an optional NMS-free end-to-end head, DFL removed,
+edge-optimised, five scales (n/s/m/l/x), AGPL-3.0.
 
 **Decision.** Port to Ultralytics YOLO26.
 
@@ -47,11 +47,21 @@ here works on both by changing `WEIGHTS`.
 - The layer *identities* changed. YOLOv7's E-ELAN, SPPCSPC and RepConv have no
   one-to-one counterpart. YOLO26's backbone/neck blocks are C3k2, with SPPF
   (residual in YOLO26) and C2PSA attention.
-- **Anything the old demonstrator showed about anchors, objectness maps or NMS
-  is gone.** YOLO26 is anchor-free and its default inference path is NMS-free
-  (an optional one-to-many path with NMS exists). If the talk track relied on
-  explaining NMS, it needs rewriting. The two-path design is itself a
-  reasonable thing to explain instead.
+- **Anchors and objectness maps are gone; NMS is not.** YOLO26 is
+  anchor-free. It carries two detection heads: the default one-to-many head,
+  whose output goes through NMS, and an optional one-to-one head that
+  predicts without NMS (`nms=False`). The demonstrator calls `predict()`
+  without that option and so runs the default head with NMS, at
+  ultralytics' defaults (confidence 0.25, IoU 0.7, at most 300 boxes).
+  *Corrected 2026-11-02:* this item used to say the default path was
+  NMS-free and the one-to-many path the optional one. Checked against
+  ultralytics 8.4.157 with `yolo26n.pt`: `Detect.end2end` is `False`, the
+  head holds both branches (`one2one_cv2`/`one2one_cv3` beside `cv2`/`cv3`),
+  and a `predict()` on `assets/street-scene.jpg` calls
+  `non_max_suppression` once, with `end2end=False`. Ultralytics' YOLO26 page
+  says the same ("The default one-to-many path uses NMS for accuracy").
+  A talk track can still explain NMS; the two-head design is an addition
+  worth explaining, not a replacement.
 
 **Licensing.** AGPL-3.0 is more restrictive than YOLOv7's GPL-3.0, and it
 matters because the demonstrator *is* a network service (§7). This decided the
