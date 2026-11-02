@@ -149,6 +149,8 @@ model here.
 **The CPU fallback does decide it.** Both profiles load the same weights file,
 and §5 depends on `FORCE_CPU=1` staying demonstrable. Reduced profile: `n`
 41.6 FPS, `m` 13.8, `x` 7.0. With `x` the fallback is no longer a fallback.
+On the deployment machine (§14.6): GPU profile 47.0 (`n`) to 39.6 (`x`),
+reduced profile `n` 55.3, `m` 24.4, `x` 12.6 — the same picture.
 
 **When to revisit.** Only if detections on the real presentation material are
 visibly inadequate — detection *quality* was never assessed, only cost. The
@@ -1048,7 +1050,8 @@ speed question — which is the opposite of the assumption the profile in
 the grid and the CPU fallback: see §3.1.
 
 The target indices are unchanged across **all five scales** — verified by dump,
-all six resolve to the same block types (§3).
+all six resolve to the same block types (§3). The deployment machine's sweep
+is in §14.6.
 
 **Caveats.** All of this is batch 1 at 640 px on a 12 GB card; `x` fits, but
 there is no headroom study. The fixed overhead is paid on the **CPU** issuing
@@ -1183,6 +1186,42 @@ slow first run), and its p5 rises from 35–44 to 46–47. That agrees with
 §14.3's "no strip" row (47.7–49.6) within its spread. `--no-funding-strip`,
 used in §14.3, is gone: the benchmark now follows `DISPLAY_MODE` exactly as
 the demonstrator does, and the window's run is the comparison.
+
+### 14.6 Model scale on the deployment machine (§3.1)
+
+Measured 2026-11-02, 12:37–12:42, on the **deployment machine**: NVIDIA
+GeForce RTX 4090, x86_64 (32 threads), driver 580.178.04, torch
+2.14.0+cu130, ultralytics 8.4.157, OpenCV 5.0.0. Commit `c94bf95`. Same
+harness and clip as §14.3 (`tools/benchmark.py --runs 3`, browser mode, no
+strip). The `s`–`x` checkpoints came from the same ultralytics assets
+release (v8.4.0) as the image's `yolo26n.pt`. Asked for so that §3.1 rests
+on figures from the machine that runs the demonstrations, not only on the
+development machine's §14.1.
+
+*Not an idle machine.* The stand's own container (image 0.3.1, webcam, GPU
+profile) was started by the camera rule (§9) at 12:35:47, when the camera
+was plugged back in, and ran beside every row below. All rows share that
+load, so they compare with each other; the `n` row is about 3 FPS below
+§14.5's 49.5–50.2, measured with the container stopped.
+
+| Weights | Params | GPU profile, FPS mean (runs 1 / 2 / 3) | Loop | Reduced profile (`FORCE_CPU=1`), FPS mean | Loop |
+|---|---|---|---|---|---|
+| `yolo26n.pt` | 2.6 M | 46.9 / 46.9 / 47.1 | 21.2–21.3 ms | 55.8 / 55.7 / 54.3 | 17.9–18.4 ms |
+| `yolo26s.pt` | 10.0 M | 43.6 / 45.9 / 45.8 | 21.8–23.0 ms | — | — |
+| `yolo26m.pt` | 21.9 M | 42.7 / 44.8 / 44.8 | 22.3–23.4 ms | 24.8 / 24.5 / 24.0 | 40.3–41.7 ms |
+| `yolo26l.pt` | 26.3 M | 41.4 / 41.2 / 40.9 | 24.2–24.5 ms | — | — |
+| `yolo26x.pt` | 59.0 M | 40.0 / 39.4 / 39.4 | 25.0–25.4 ms | 12.6 / 12.6 / 12.6 | 79.1–79.4 ms |
+
+p5 stayed at or above 35 FPS on the GPU profile for every scale. The same
+check on all five checkpoints, on `assets/street-scene.jpg` at 640 px: 24
+modules each, the six targets resolving to C3k2, C3k2, SPPF, C2PSA, C3k2,
+C3k2, with the channel counts of §3.1.
+
+**What it confirms.** As in §14.1, every scale holds above 30 FPS on the GPU
+— 23 times the parameters cost about 7 FPS here — so speed does not decide
+the scale. The reduced profile does: `n` at 55 FPS, `m` at 24 and `x` at 13,
+where the fallback stops being one (§3.1). Run-to-run spread was up to 2 FPS
+on the GPU profile.
 
 ---
 
